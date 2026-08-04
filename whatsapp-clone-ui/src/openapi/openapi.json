@@ -1,0 +1,367 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "WhatsApp Clone API",
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local dev server"
+    }
+  ],
+  "paths": {
+    "/api/v1/conversations": {
+      "get": {
+        "tags": ["Conversation"],
+        "operationId": "getConversations",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/ConversationResponse" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Conversation"],
+        "operationId": "createConversation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateConversationRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/StringResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversations/{conversation-id}/messages": {
+      "get": {
+        "tags": ["Message"],
+        "operationId": "getMessages",
+        "parameters": [
+          {
+            "name": "conversation-id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "format": "int64" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 30 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MessagePageResponse" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Message"],
+        "operationId": "sendMessage",
+        "parameters": [
+          {
+            "name": "conversation-id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SendMessageRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MessageResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversations/{conversation-id}/messages/attachments": {
+      "post": {
+        "tags": ["Message"],
+        "operationId": "uploadAttachment",
+        "parameters": [
+          {
+            "name": "conversation-id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": ["file"],
+                "type": "object",
+                "properties": {
+                  "file": { "type": "string", "format": "binary" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MessageResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/conversations/{conversation-id}/read": {
+      "patch": {
+        "tags": ["Message"],
+        "operationId": "markMessagesAsRead",
+        "parameters": [
+          {
+            "name": "conversation-id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "202": { "description": "Accepted" }
+        }
+      }
+    },
+    "/api/v1/conversations/{conversation-id}/messages/{message-id}": {
+      "patch": {
+        "tags": ["Message"],
+        "operationId": "editMessage",
+        "parameters": [
+          {
+            "name": "conversation-id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "message-id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/EditMessageRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MessageResponse" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Message"],
+        "operationId": "deleteMessage",
+        "parameters": [
+          {
+            "name": "conversation-id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "message-id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64" }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["me", "everyone"], "default": "everyone" }
+          }
+        ],
+        "responses": {
+          "204": { "description": "No Content" }
+        }
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "tags": ["User"],
+        "operationId": "getAllUsers",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/UserResponse" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateConversationRequest": {
+        "type": "object",
+        "required": ["participantId"],
+        "properties": {
+          "participantId": { "type": "string" }
+        }
+      },
+      "StringResponse": {
+        "type": "object",
+        "properties": {
+          "response": { "type": "string" }
+        }
+      },
+      "ConversationResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "type": { "type": "string", "enum": ["PRIVATE", "GROUP"] },
+          "name": { "type": "string" },
+          "unreadCount": { "type": "integer", "format": "int32" },
+          "lastMessageId": { "type": "integer", "format": "int64" },
+          "lastMessage": { "type": "string" },
+          "lastMessageType": { "type": "string", "enum": ["TEXT", "IMAGE", "VIDEO", "AUDIO", "FILE"] },
+          "lastMessageStatus": { "type": "string", "enum": ["PENDING", "SENT", "DELIVERED", "READ", "FAILED"] },
+          "lastMessageTime": { "type": "string", "format": "date-time" },
+          "otherUserId": { "type": "string" },
+          "otherUserOnline": { "type": "boolean" },
+          "otherUserLastSeen": { "type": "string", "format": "date-time" }
+        }
+      },
+      "SendMessageRequest": {
+        "type": "object",
+        "required": ["content"],
+        "properties": {
+          "content": { "type": "string" },
+          "type": { "type": "string", "enum": ["TEXT", "IMAGE", "VIDEO", "AUDIO", "FILE"] },
+          "replyToMessageId": { "type": "integer", "format": "int64" }
+        }
+      },
+      "EditMessageRequest": {
+        "type": "object",
+        "required": ["content"],
+        "properties": {
+          "content": { "type": "string" }
+        }
+      },
+      "MessagePageResponse": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/MessageResponse" }
+          },
+          "hasMore": { "type": "boolean" },
+          "nextCursor": { "type": "integer", "format": "int64" }
+        }
+      },
+      "MessageResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "format": "int64" },
+          "content": { "type": "string" },
+          "type": { "type": "string", "enum": ["TEXT", "IMAGE", "VIDEO", "AUDIO", "FILE"] },
+          "status": { "type": "string", "enum": ["PENDING", "SENT", "DELIVERED", "READ", "FAILED"] },
+          "senderId": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "attachments": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AttachmentResponse" }
+          },
+          "replyToMessageId": { "type": "integer", "format": "int64" },
+          "replyToContent": { "type": "string" },
+          "replyToType": { "type": "string", "enum": ["TEXT", "IMAGE", "VIDEO", "AUDIO", "FILE"] },
+          "edited": { "type": "boolean" },
+          "editedAt": { "type": "string", "format": "date-time" },
+          "deleted": { "type": "boolean" }
+        }
+      },
+      "AttachmentResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "format": "int64" },
+          "objectKey": { "type": "string" },
+          "mimeType": { "type": "string" },
+          "sizeBytes": { "type": "integer", "format": "int64" },
+          "width": { "type": "integer", "format": "int32" },
+          "height": { "type": "integer", "format": "int32" },
+          "durationSeconds": { "type": "integer", "format": "int32" },
+          "url": { "type": "string" }
+        }
+      },
+      "UserResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "firstName": { "type": "string" },
+          "lastName": { "type": "string" },
+          "email": { "type": "string" },
+          "online": { "type": "boolean" },
+          "lastSeen": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,196 @@
+<div class="main">
+  <div class="background-green"></div>
+
+  <div class="main-container d-flex">
+    <div class="d-flex flex-column justify-content-between align-items-center p-3 gray-bg">
+      <div>
+        <i class="fa-solid fa-message"></i>
+      </div>
+      <div class="d-flex flex-column align-items-center gap-2">
+        <i class="fa-solid fa-user cursor-pointer" (click)="userProfile()"></i>
+        <i class="fa-solid fa-door-open cursor-pointer" (click)="logout()"></i>
+      </div>
+    </div>
+    <div class="d-flex w-100">
+      <div class="col-3 overflow-x-scroll">
+        <app-chat-list
+          [chats]="conversations"
+          (chatSelected)="chatSelected($event)"
+        ></app-chat-list>
+      </div>
+      @if (selectedConversation && selectedConversation.id) {
+        <div class="col-9">
+          <div class="d-flex flex-column justify-content-between h-100">
+            <div class="gray-bg p-2">
+              <div class="d-flex gap-2">
+                <div class="user-img">
+                  <img src="user.png" alt="">
+                </div>
+                <div class="d-flex flex-column">
+                  <span>{{ selectedConversation.name }}</span>
+                  <div class="d-flex gap-1 align-items-center">
+                    @if (otherUserTyping) {
+                      <small class="typing-indicator">typing...</small>
+                    } @else if (selectedConversation.otherUserOnline) {
+                      <small class="online-status"></small>
+                      <small>Online</small>
+                    } @else {
+                      <small class="offline-status"></small>
+                      <small>Offline</small>
+                    }
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div #scrollableDiv class="h-100 bg-chat p-3 overflow-y-auto" (scroll)="onScroll($event)">
+              @for (message of chatMessages; track message.id) {
+                @if (isSelfMessage(message)) {
+                  <div class="message-box self">
+                    <div class="d-flex flex-column">
+                      @if (message.replyToContent) {
+                        <div class="reply-preview">
+                          <small class="text-black-50">Reply to</small>
+                          <span>{{ message.replyToContent }}</span>
+                        </div>
+                      }
+                      @if (message.deleted) {
+                        <span class="deleted-message">{{ message.content }}</span>
+                      } @else if (message.type === 'TEXT') {
+                        <span>{{ message.content }}</span>
+                      } @else if (message.type === 'IMAGE') {
+                        <img width="200" class="cursor-pointer" [src]="firstAttachmentUrl(message)" alt="">
+                      } @else if (message.type === 'VIDEO') {
+                        <video width="240" controls [src]="firstAttachmentUrl(message)"></video>
+                      } @else if (message.type === 'AUDIO') {
+                        <audio controls [src]="firstAttachmentUrl(message)"></audio>
+                      } @else {
+                        <a class="attachment-link" [href]="firstAttachmentUrl(message)" target="_blank">
+                          <i class="fas fa-paperclip"></i>&nbsp;{{ attachmentLabel(message.attachments && message.attachments[0] ? message.attachments[0] : null) }}
+                        </a>
+                      }
+                      <small class="text-black-50">
+                        @if (message.edited && !message.deleted) {
+                          <span class="edited-badge">(edited)</span>&nbsp;
+                        }
+                        {{ message.createdAt | date:'HH:mm' }}&nbsp;
+                        @if (message.status === 'READ') {
+                          <span>
+                            <i class="fas fa-check seen"></i>
+                            <i class="fas fa-check seen ml-neg"></i>
+                          </span>
+                        } @else if (message.status === 'DELIVERED' || message.status === 'SENT') {
+                          <span>
+                            <i class="fas fa-check seen"></i>
+                            <i class="fas fa-check seen ml-neg"></i>
+                          </span>
+                        }
+                      </small>
+                    </div>
+                    @if (!message.deleted) {
+                      <div class="message-actions">
+                        <i class="fa-solid fa-reply cursor-pointer" title="Reply" (click)="replyTo(message)"></i>
+                        @if (message.type === 'TEXT') {
+                          <i class="fa-solid fa-pen cursor-pointer" title="Edit" (click)="startEdit(message)"></i>
+                        }
+                        <i class="fa-solid fa-trash cursor-pointer" title="Delete for me" (click)="deleteMessage(message, 'me')"></i>
+                        <i class="fa-solid fa-trash-can cursor-pointer" title="Delete for everyone" (click)="deleteMessage(message, 'everyone')"></i>
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <div class="message-box friend">
+                    <div class="d-flex flex-column align-items-end">
+                      @if (message.replyToContent) {
+                        <div class="reply-preview">
+                          <small class="text-black-50">Reply to</small>
+                          <span>{{ message.replyToContent }}</span>
+                        </div>
+                      }
+                      @if (message.deleted) {
+                        <span class="deleted-message">{{ message.content }}</span>
+                      } @else if (message.type === 'TEXT') {
+                        <span>{{ message.content }}</span>
+                      } @else if (message.type === 'IMAGE') {
+                        <img width="200" class="cursor-pointer" [src]="firstAttachmentUrl(message)" alt="">
+                      } @else if (message.type === 'VIDEO') {
+                        <video width="240" controls [src]="firstAttachmentUrl(message)"></video>
+                      } @else if (message.type === 'AUDIO') {
+                        <audio controls [src]="firstAttachmentUrl(message)"></audio>
+                      } @else {
+                        <a class="attachment-link" [href]="firstAttachmentUrl(message)" target="_blank">
+                          <i class="fas fa-paperclip"></i>&nbsp;{{ attachmentLabel(message.attachments && message.attachments[0] ? message.attachments[0] : null) }}
+                        </a>
+                      }
+                      <small class="text-black-50">
+                        @if (message.edited && !message.deleted) {
+                          <span class="edited-badge">(edited)</span>&nbsp;
+                        }
+                        {{ message.createdAt | date:'HH:mm' }}
+                      </small>
+                    </div>
+                  </div>
+                }
+              }
+            </div>
+            <div class="gray-bg p-2">
+              @if (pendingReply) {
+                <div class="reply-bar">
+                  <span class="reply-bar-label"><i class="fa-solid fa-reply"></i>&nbsp;Replying to</span>
+                  <span class="reply-bar-content">{{ pendingReply.content }}</span>
+                  <i class="fa-solid fa-xmark cursor-pointer" (click)="cancelReply()"></i>
+                </div>
+              }
+              @if (editingMessage) {
+                <div class="reply-bar">
+                  <span class="reply-bar-label"><i class="fa-solid fa-pen"></i>&nbsp;Editing message</span>
+                  <span class="reply-bar-content">{{ editingMessage.content }}</span>
+                  <i class="fa-solid fa-xmark cursor-pointer" (click)="cancelEdit()"></i>
+                </div>
+              }
+              <div class="d-flex align-items-center gap-2">
+                <i class="fas fa-paperclip cursor-pointer"
+                (click)="inputFile.click()"></i>
+                <input
+                  #inputFile
+                  type="file"
+                  [hidden]="true"
+                  accept=".jpg, .jpeg, .png, .gif, .svg, .mp4, .mov, .mp3, .wav, .pdf, .doc, .docx, .xlsx, .zip, .txt"
+                  (change)="uploadMedia($event.target)"
+                >
+                <i class="fa-regular fa-face-smile cursor-pointer" (click)="showEmojis = !showEmojis"></i>
+                @if (showEmojis) {
+                  <emoji-mart
+                    [set]="'google'"
+                    title="Pick your emoji.."
+                    emoji="smile"
+                    class="emojis-panel"
+                    (emojiClick)="onSelectEmojis($event)"
+                  ></emoji-mart>
+                }
+                <input type="text"
+                       class="form-control-sm w-100"
+                       [placeholder]="editingMessage ? 'Edit message' : 'Type a message'"
+                       [(ngModel)]="messageContent"
+                       (keydown)="keyDown($event)"
+                       (input)="onTypingInput()"
+                       (blur)="onTypingStop()"
+                >
+                @if (messageContent) {
+                  <i class="fa-solid fa-paper-plane cursor-pointer" (click)="sendMessage()"></i>
+                } @else {
+                  <i class="fa-solid fa-microphone cursor-pointer"></i>
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+      } @else {
+        <div class="d-flex flex-column justify-content-center align-items-center h-100 w-100 bg-chat ">
+          <img width="300" src="wa_banner.png" alt="">
+          <h2 class="text-black-50">WhatsApp Clone Application By Alibou</h2>
+          <p class="text-black-50"></p>
+        </div>
+      }
+    </div>
+  </div>
+</div>
