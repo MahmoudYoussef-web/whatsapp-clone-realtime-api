@@ -1,0 +1,64 @@
+services:
+  postgres:
+    container_name: postgres-sql-wac
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: username
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: whatsapp_clone
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    networks:
+      - whatsapp-clone
+    restart: unless-stopped
+  keycloak:
+    container_name: keycloak-wac
+    image: quay.io/keycloak/keycloak:26.0.0
+    ports:
+      - 9090:8080
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    networks:
+      - whatsapp-clone
+    command:
+      - "start-dev"
+  minio:
+    container_name: minio-wac
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio:/data
+    ports:
+      - 9000:9000
+      - 9001:9001
+    networks:
+      - whatsapp-clone
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+  redis:
+    container_name: redis-wac
+    image: redis:7-alpine
+    ports:
+      - 6379:6379
+    networks:
+      - whatsapp-clone
+    restart: unless-stopped
+networks:
+  whatsapp-clone:
+    driver: bridge
+
+volumes:
+  postgres:
+    driver: local
+  minio:
+    driver: local
