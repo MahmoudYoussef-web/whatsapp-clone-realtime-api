@@ -1,0 +1,1 @@
+https://start.spring.io/#!type=maven-project&language=java&platformVersion=3.4.1&packaging=jar&jvmVersion=17&groupId=com.alibou&artifactId=whatsappclone&name=WhatsApp-Clone-API&description=WhatsApp%20clone%20API&packageName=com.alibou.whatsappclone&dependencies=web,flyway,data-jpa,validation,websocket,lombok,postgresql,oauth2-resource-server
