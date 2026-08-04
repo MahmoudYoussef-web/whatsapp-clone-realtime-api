@@ -83,7 +83,7 @@ graph TD
     subgraph Client["Client — Angular 19 (localhost:4200)"]
         UI[Angular SPA]
         STOMP[SockJS + STOMP client]
-        KEYCLOAKJS[Keycloak JS (OIDC login)]
+        KEYCLOAKJS["Keycloak JS (OIDC login)"]
     end
 
     subgraph IdP["Identity Provider"]
@@ -94,7 +94,7 @@ graph TD
         subgraph SecurityLayer["Security Layer"]
             CORS[CORS Filter<br/>localhost:4200 only]
             JWT[OAuth2 Resource Server<br/>KeycloakJwtAuthenticationConverter]
-            SYNC[UserSynchronizerFilter<br/>JWT → users upsert (Caffeine-throttled)]
+            SYNC["UserSynchronizerFilter<br/>JWT → users upsert (Caffeine-throttled)"]
             WSINTERCEPT[UserPresenceChannelInterceptor<br/>CONNECT auth · per-frame exp · presence]
             SECTX[SecurityContextChannelInterceptor<br/>STOMP identity → SecurityContextHolder]
         end
@@ -140,7 +140,7 @@ graph TD
     MSSVC --> PG
     PRES --> REDIS
     STORAGE --> MINIO
-    NOTIF -->|/user/{id}/chat| STOMP
+    NOTIF -->|"/user/{id}/chat"| STOMP
     UI -->|OIDC authorize| KC
     KC -->|JWT · issuer| JWT
     MINIO -->|presigned GET URLs| UI
