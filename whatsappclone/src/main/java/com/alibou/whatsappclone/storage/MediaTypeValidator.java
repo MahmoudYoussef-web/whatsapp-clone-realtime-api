@@ -28,6 +28,8 @@ public final class MediaTypeValidator {
             Map.entry("mp3", "audio/mpeg"),
             Map.entry("wav", "audio/wav"),
             Map.entry("ogg", "audio/ogg"),
+            Map.entry("weba", "audio/webm"),
+            Map.entry("m4a", "audio/mp4"),
             Map.entry("pdf", "application/pdf"),
             Map.entry("txt", "text/plain"),
             Map.entry("md", "text/markdown"),

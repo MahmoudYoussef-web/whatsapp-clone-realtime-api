@@ -16,7 +16,7 @@ public interface ConversationParticipantRepository extends JpaRepository<Convers
             JOIN FETCH p.conversation c
             LEFT JOIN FETCH c.lastMessage lm
             WHERE p.user.id = :userId
-            ORDER BY COALESCE(lm.createdDate, c.createdDate) DESC
+            ORDER BY p.pinned DESC, COALESCE(lm.createdDate, c.createdDate) DESC
             """)
     List<ConversationParticipant> findConversationsByUserId(@Param("userId") String userId);
 
@@ -55,4 +55,28 @@ public interface ConversationParticipantRepository extends JpaRepository<Convers
             """, nativeQuery = true)
     int resetUnreadCount(@Param("conversationId") UUID conversationId,
                          @Param("userId") String userId);
+
+    @Modifying(clearAutomatically = true)
+    @Query("""
+            UPDATE ConversationParticipant p
+            SET p.pinned = :pinned,
+                p.lastModifiedDate = CURRENT_TIMESTAMP
+            WHERE p.conversation.id = :conversationId
+              AND p.user.id = :userId
+            """)
+    int setPinned(@Param("conversationId") UUID conversationId,
+                  @Param("userId") String userId,
+                  @Param("pinned") boolean pinned);
+
+    @Modifying(clearAutomatically = true)
+    @Query("""
+            UPDATE ConversationParticipant p
+            SET p.archived = :archived,
+                p.lastModifiedDate = CURRENT_TIMESTAMP
+            WHERE p.conversation.id = :conversationId
+              AND p.user.id = :userId
+            """)
+    int setArchived(@Param("conversationId") UUID conversationId,
+                    @Param("userId") String userId,
+                    @Param("archived") boolean archived);
 }

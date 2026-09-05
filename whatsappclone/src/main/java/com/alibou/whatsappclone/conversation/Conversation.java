@@ -39,6 +39,14 @@ public class Conversation extends BaseAuditingEntity {
     @Enumerated(EnumType.STRING)
     private ConversationType type = ConversationType.PRIVATE;
 
+    /** Group display name; null for private conversations. */
+    private String name;
+
+    /** MinIO object key of the group avatar; served via presigned URL. */
+    private String avatarObjectKey;
+
+    private String createdBy;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "last_message_id")
     private Message lastMessage;

@@ -1,15 +1,25 @@
 package com.alibou.whatsappclone.conversation;
 
 import com.alibou.whatsappclone.message.Message;
+import com.alibou.whatsappclone.notification.Notification;
+import com.alibou.whatsappclone.notification.NotificationService;
+import com.alibou.whatsappclone.notification.NotificationType;
+import com.alibou.whatsappclone.storage.FileStorageService;
+import com.alibou.whatsappclone.storage.StoredFile;
+import com.alibou.whatsappclone.storage.StorageProperties;
 import com.alibou.whatsappclone.user.User;
 import com.alibou.whatsappclone.user.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -20,6 +30,9 @@ public class ConversationService {
     private final ConversationParticipantRepository participantRepository;
     private final UserRepository userRepository;
     private final ConversationMapper mapper;
+    private final NotificationService notificationService;
+    private final FileStorageService fileStorageService;
+    private final StorageProperties storageProperties;
 
     /**
      * Creates a PRIVATE conversation, or returns the existing one (idempotent).
@@ -51,6 +64,216 @@ public class ConversationService {
         addParticipant(conversation, other);
 
         return conversation.getId();
+    }
+
+    // ------------------------------------------------------------------
+    // Groups
+    // ------------------------------------------------------------------
+
+    /**
+     * Creates a GROUP conversation. Creator becomes ADMIN, every member a row
+     * in conversation_participants (existing table, no new join model).
+     */
+    @Transactional
+    public UUID createGroupConversation(String creatorId, String name, List<String> memberIds) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Group name is required");
+        }
+        Set<String> unique = new LinkedHashSet<>(memberIds == null ? List.of() : memberIds);
+        unique.remove(creatorId);
+        if (unique.isEmpty()) {
+            throw new IllegalArgumentException("A group needs at least one other member");
+        }
+        User creator = userRepository.findById(creatorId)
+                .orElseThrow(() -> new EntityNotFoundException("User with id " + creatorId + " not found"));
+
+        Conversation conversation = Conversation.builder()
+                .type(ConversationType.GROUP)
+                .name(name.strip())
+                .createdBy(creatorId)
+                .build();
+        conversation = conversationRepository.save(conversation);
+
+        addParticipantWithRole(conversation, creator, ParticipantRole.ADMIN);
+        List<String> addedIds = new java.util.ArrayList<>();
+        for (String memberId : unique) {
+            User member = userRepository.findById(memberId)
+                    .orElseThrow(() -> new EntityNotFoundException("User with id " + memberId + " not found"));
+            addParticipantWithRole(conversation, member, ParticipantRole.MEMBER);
+            addedIds.add(memberId);
+        }
+        notifyGroupMembers(conversation.getId(), creatorId, addedIds, NotificationType.MEMBER_ADDED);
+        return conversation.getId();
+    }
+
+    @Transactional
+    public void addGroupMember(UUID conversationId, String adminId, String newMemberId) {
+        Conversation conversation = requireGroup(conversationId);
+        requireParticipant(conversationId, adminId);
+        requireAdmin(conversationId, adminId);
+        if (participantRepository.findByConversation_IdAndUser_Id(conversationId, newMemberId).isPresent()) {
+            throw new IllegalStateException("User is already a member of this group");
+        }
+        User member = userRepository.findById(newMemberId)
+                .orElseThrow(() -> new EntityNotFoundException("User with id " + newMemberId + " not found"));
+        addParticipantWithRole(conversation, member, ParticipantRole.MEMBER);
+        notifyGroupMembers(conversationId, adminId, List.of(newMemberId), NotificationType.MEMBER_ADDED);
+    }
+
+    @Transactional
+    public void removeGroupMember(UUID conversationId, String adminId, String memberId) {
+        requireGroup(conversationId);
+        requireParticipant(conversationId, adminId);
+        requireAdmin(conversationId, adminId);
+        if (adminId.equals(memberId)) {
+            throw new IllegalArgumentException("Admins cannot remove themselves; leave the group instead");
+        }
+        ConversationParticipant participant = participantRepository
+                .findByConversation_IdAndUser_Id(conversationId, memberId)
+                .orElseThrow(() -> new EntityNotFoundException("User " + memberId + " is not a member"));
+        participantRepository.delete(participant);
+        notifyGroupMembers(conversationId, adminId, List.of(memberId), NotificationType.MEMBER_REMOVED);
+    }
+
+    @Transactional
+    public void leaveGroup(UUID conversationId, String userId) {
+        requireGroup(conversationId);
+        ConversationParticipant participant = participantRepository
+                .findByConversation_IdAndUser_Id(conversationId, userId)
+                .orElseThrow(() -> new EntityNotFoundException("User " + userId + " is not a member"));
+        participantRepository.delete(participant);
+        notifyGroupMembers(conversationId, userId, List.of(userId), NotificationType.MEMBER_REMOVED);
+    }
+
+    @Transactional
+    public void renameGroup(UUID conversationId, String userId, String name) {        Conversation conversation = requireGroup(conversationId);
+        requireParticipant(conversationId, userId);
+        requireAdmin(conversationId, userId);
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Group name is required");
+        }
+        conversation.setName(name.strip());
+        conversationRepository.save(conversation);
+        for (String otherId : getOtherParticipantIds(conversationId, userId)) {
+            notificationService.sendNotification(otherId, Notification.builder()
+                    .type(NotificationType.GROUP_INFO_UPDATED)
+                    .conversationId(conversationId)
+                    .senderId(userId)
+                    .receiverId(otherId)
+                    .build());
+        }
+    }
+
+    @Transactional
+    public void setPinned(UUID conversationId, String userId, boolean pinned) {
+        requireParticipant(conversationId, userId);
+        participantRepository.setPinned(conversationId, userId, pinned);
+    }
+
+    @Transactional
+    public void setArchived(UUID conversationId, String userId, boolean archived) {
+        requireParticipant(conversationId, userId);
+        participantRepository.setArchived(conversationId, userId, archived);
+    }
+
+    @Transactional
+    public void updateGroupAvatar(UUID conversationId, String userId, org.springframework.web.multipart.MultipartFile file) {
+        Conversation conversation = requireGroup(conversationId);
+        requireParticipant(conversationId, userId);
+        requireAdmin(conversationId, userId);
+        StoredFile stored = fileStorageService.uploadAvatar(file, "group-" + conversationId);
+        String oldKey = conversation.getAvatarObjectKey();
+        conversation.setAvatarObjectKey(stored.objectKey());
+        conversationRepository.save(conversation);
+        if (oldKey != null) {
+            try {
+                fileStorageService.delete(stored.bucket(), oldKey);
+            } catch (RuntimeException e) {
+                org.slf4j.LoggerFactory.getLogger(ConversationService.class)
+                        .warn("Could not delete old group avatar {}", oldKey, e);
+            }
+        }
+        for (String otherId : getOtherParticipantIds(conversationId, userId)) {
+            notificationService.sendNotification(otherId, Notification.builder()
+                    .type(NotificationType.GROUP_INFO_UPDATED)
+                    .conversationId(conversationId)
+                    .senderId(userId)
+                    .receiverId(otherId)
+                    .build());
+        }
+    }
+
+    private Conversation requireGroup(UUID conversationId) {
+        Conversation conversation = getConversation(conversationId);
+        if (conversation.getType() != ConversationType.GROUP) {
+            throw new IllegalArgumentException("Conversation " + conversationId + " is not a group");
+        }
+        return conversation;
+    }
+
+    /**
+     * Lists group members with roles and avatar URLs. Any participant may
+     * read the roster; admins are distinguished so the UI can gate actions.
+     */
+    @Transactional(readOnly = true)
+    public List<GroupMemberResponse> getGroupMembers(UUID conversationId, String viewerId) {
+        requireGroup(conversationId);
+        requireParticipant(conversationId, viewerId);
+        return getParticipants(conversationId).stream()
+                .sorted(Comparator.comparing((ConversationParticipant p) -> p.getRole() != ParticipantRole.ADMIN)
+                        .thenComparing(p -> displayName(p.getUser())))
+                .map(p -> {
+                    User user = p.getUser();
+                    return GroupMemberResponse.builder()
+                            .id(user.getId())
+                            .name(displayName(user))
+                            .avatarUrl(presignedAvatar(user.getAvatarObjectKey()))
+                            .role(p.getRole())
+                            .self(user.getId().equals(viewerId))
+                            .build();
+                })
+                .toList();
+    }
+
+    private static String displayName(User user) {
+        String name = ((user.getFirstName() != null ? user.getFirstName() : "")
+                + " " + (user.getLastName() != null ? user.getLastName() : "")).strip();
+        return name.isEmpty() ? user.getId() : name;
+    }
+
+    private String presignedAvatar(String objectKey) {
+        if (objectKey == null) {
+            return null;
+        }
+        try {
+            return fileStorageService.presignedGetUrl(storageProperties.bucket(), objectKey);
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(ConversationService.class)
+                    .warn("Could not presign avatar {}", objectKey, e);
+            return null;
+        }
+    }
+
+    private void requireAdmin(UUID conversationId, String userId) {
+        ConversationParticipant participant = participantRepository
+                .findByConversation_IdAndUser_Id(conversationId, userId)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "User " + userId + " is not a participant of conversation " + conversationId));
+        if (participant.getRole() != ParticipantRole.ADMIN) {
+            throw new AccessDeniedException("Only group admins can perform this action");
+        }
+    }
+
+    private void notifyGroupMembers(UUID conversationId, String actorId, List<String> affectedIds,
+                                    NotificationType type) {
+        for (String otherId : getOtherParticipantIds(conversationId, actorId)) {
+            notificationService.sendNotification(otherId, Notification.builder()
+                    .type(type)
+                    .conversationId(conversationId)
+                    .senderId(actorId)
+                    .receiverId(otherId)
+                    .build());
+        }
     }
 
     @Transactional(readOnly = true)
@@ -94,10 +317,14 @@ public class ConversationService {
     }
 
     private void addParticipant(Conversation conversation, User user) {
+        addParticipantWithRole(conversation, user, ParticipantRole.MEMBER);
+    }
+
+    private void addParticipantWithRole(Conversation conversation, User user, ParticipantRole role) {
         ConversationParticipant participant = ConversationParticipant.builder()
                 .conversation(conversation)
                 .user(user)
-                .role(ParticipantRole.MEMBER)
+                .role(role)
                 .joinedAt(LocalDateTime.now())
                 .unreadCount(0)
                 .build();

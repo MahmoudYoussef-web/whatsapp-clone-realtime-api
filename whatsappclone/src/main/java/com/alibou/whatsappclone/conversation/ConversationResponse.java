@@ -20,8 +20,15 @@ public class ConversationResponse {
     private final String lastMessage;
     private final MessageType lastMessageType;
     private final MessageStatus lastMessageStatus;
+    private final String lastMessageSenderId;
     private final LocalDateTime lastMessageTime;
     private final String otherUserId;
     private final boolean otherUserOnline;
     private final LocalDateTime otherUserLastSeen;
+    private final String otherUserAvatarUrl;
+    private final String groupAvatarUrl;
+    private final int memberCount;
+    private final boolean pinned;
+    private final boolean archived;
+    private final Long lastReadMessageId;
 }

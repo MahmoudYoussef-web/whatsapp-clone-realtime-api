@@ -35,6 +35,9 @@ public class User extends BaseAuditingEntity {
 
     private LocalDateTime lastSeen;
 
+    /** MinIO object key of the profile avatar; served via presigned URL. */
+    private String avatarObjectKey;
+
     @Transient
     public boolean isUserOnline() {
         return lastSeen != null && lastSeen.isAfter(LocalDateTime.now().minusMinutes(LAST_ACTIVE_INTERVAL_MINUTES));

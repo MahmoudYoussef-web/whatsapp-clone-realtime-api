@@ -2,26 +2,46 @@ package com.alibou.whatsappclone.conversation;
 
 import com.alibou.whatsappclone.message.Message;
 import com.alibou.whatsappclone.presence.PresenceService;
+import com.alibou.whatsappclone.storage.FileStorageService;
+import com.alibou.whatsappclone.storage.StorageProperties;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ConversationMapper {
 
     private final PresenceService presenceService;
+    private final FileStorageService fileStorageService;
+    private final StorageProperties storageProperties;
 
     public ConversationResponse toResponse(Conversation conversation,
                                            ConversationParticipant viewerParticipant,
                                            String viewerId) {
-        ConversationParticipant other = otherParticipant(conversation, viewerId);
+        boolean isGroup = conversation.getType() == ConversationType.GROUP;
+        ConversationParticipant other = isGroup ? null : otherParticipant(conversation, viewerId);
         Message lastMessage = conversation.getLastMessage();
 
-        String name = other != null
-                ? other.getUser().getFirstName() + " " + other.getUser().getLastName()
-                : "Conversation";
-
-        boolean otherOnline = other != null && presenceService.isOnline(other.getUser().getId());
+        String name;
+        boolean otherOnline = false;
+        String otherUserId = null;
+        java.time.LocalDateTime otherLastSeen = null;
+        String otherAvatarUrl = null;
+        String groupAvatarUrl = null;
+        if (isGroup) {
+            name = conversation.getName() != null ? conversation.getName() : "Group";
+            groupAvatarUrl = presignedAvatar(conversation.getAvatarObjectKey());
+        } else {
+            name = other != null
+                    ? other.getUser().getFirstName() + " " + other.getUser().getLastName()
+                    : "Conversation";
+            otherOnline = other != null && presenceService.isOnline(other.getUser().getId());
+            otherUserId = other != null ? other.getUser().getId() : null;
+            otherLastSeen = other != null ? other.getUser().getLastSeen() : null;
+            otherAvatarUrl = other != null ? presignedAvatar(other.getUser().getAvatarObjectKey()) : null;
+        }
 
         String lastMessageContent = null;
         if (lastMessage != null) {
@@ -41,11 +61,31 @@ public class ConversationMapper {
                 .lastMessage(lastMessageContent)
                 .lastMessageType(lastMessage != null ? lastMessage.getType() : null)
                 .lastMessageStatus(lastMessage != null ? lastMessage.getStatus() : null)
+                .lastMessageSenderId(lastMessage != null ? lastMessage.getSender().getId() : null)
                 .lastMessageTime(lastMessage != null ? lastMessage.getCreatedDate() : null)
-                .otherUserId(other != null ? other.getUser().getId() : null)
+                .otherUserId(otherUserId)
                 .otherUserOnline(otherOnline)
-                .otherUserLastSeen(other != null ? other.getUser().getLastSeen() : null)
+                .otherUserLastSeen(otherLastSeen)
+                .otherUserAvatarUrl(otherAvatarUrl)
+                .groupAvatarUrl(groupAvatarUrl)
+                .memberCount(conversation.getParticipants() != null ? conversation.getParticipants().size() : 0)
+                .pinned(viewerParticipant.isPinned())
+                .archived(viewerParticipant.isArchived())
+                .lastReadMessageId(viewerParticipant.getLastReadMessage() != null
+                        ? viewerParticipant.getLastReadMessage().getId() : null)
                 .build();
+    }
+
+    private String presignedAvatar(String objectKey) {
+        if (objectKey == null) {
+            return null;
+        }
+        try {
+            return fileStorageService.presignedGetUrl(storageProperties.bucket(), objectKey);
+        } catch (RuntimeException e) {
+            log.warn("Could not presign avatar {}", objectKey, e);
+            return null;
+        }
     }
 
     private ConversationParticipant otherParticipant(Conversation conversation, String viewerId) {

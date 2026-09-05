@@ -15,4 +15,5 @@ public class UserResponse {
     private final String email;
     private final boolean online;
     private final LocalDateTime lastSeen;
+    private final String avatarUrl;
 }

@@ -1,5 +1,7 @@
 package com.alibou.whatsappclone.conversation;
 
+import com.alibou.whatsappclone.notification.NotificationService;
+import com.alibou.whatsappclone.storage.FileStorageService;
 import com.alibou.whatsappclone.user.User;
 import com.alibou.whatsappclone.user.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -35,6 +37,12 @@ class ConversationServiceTest {
 
     @Mock
     private ConversationMapper mapper;
+
+    @Mock
+    private NotificationService notificationService;
+
+    @Mock
+    private FileStorageService fileStorageService;
 
     @InjectMocks
     private ConversationService conversationService;
@@ -136,5 +144,117 @@ class ConversationServiceTest {
         List<String> others = conversationService.getOtherParticipantIds(conversation.getId(), "a");
 
         assertThat(others).containsExactly("b");
+    }
+
+    @Test
+    void createGroupConversation_createsGroupWithAdminAndMembers() {
+        User creator = User.builder().id("admin").build();
+        User m1 = User.builder().id("m1").build();
+        Conversation saved = Conversation.builder()
+                .id(UUID.randomUUID()).type(ConversationType.GROUP).name("Team").build();
+        when(userRepository.findById("admin")).thenReturn(Optional.of(creator));
+        when(userRepository.findById("m1")).thenReturn(Optional.of(m1));
+        when(conversationRepository.save(any(Conversation.class))).thenReturn(saved);
+        when(participantRepository.findByConversation_Id(any())).thenReturn(List.of());
+
+        UUID result = conversationService.createGroupConversation("admin", "Team", List.of("m1"));
+
+        assertThat(result).isEqualTo(saved.getId());
+        verify(conversationRepository).save(any(Conversation.class));
+        verify(participantRepository, org.mockito.Mockito.times(2)).save(any());
+    }
+
+    @Test
+    void createGroupConversation_rejectsBlankNameAndEmptyMembers() {
+        assertThatThrownBy(() -> conversationService.createGroupConversation("admin", "  ", List.of("m1")))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> conversationService.createGroupConversation("admin", "Team", List.of()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void addGroupMember_rejectsNonAdmin() {        UUID id = UUID.randomUUID();
+        Conversation group = Conversation.builder().id(id).type(ConversationType.GROUP).build();
+        when(conversationRepository.findById(id)).thenReturn(Optional.of(group));
+        ConversationParticipant admin = ConversationParticipant.builder()
+                .conversation(group).user(User.builder().id("admin").build())
+                .role(ParticipantRole.MEMBER).build();
+        when(participantRepository.findByConversation_IdAndUser_Id(id, "admin"))
+                .thenReturn(Optional.of(admin));
+
+        assertThatThrownBy(() -> conversationService.addGroupMember(id, "admin", "newbie"))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    }
+
+    @Test
+    void setPinned_updatesParticipantFlag() {
+        UUID id = UUID.randomUUID();
+        ConversationParticipant p = ConversationParticipant.builder()
+                .conversation(Conversation.builder().id(id).build())
+                .user(User.builder().id("user-a").build()).build();
+        when(participantRepository.findByConversation_IdAndUser_Id(id, "user-a"))
+                .thenReturn(Optional.of(p));
+
+        conversationService.setPinned(id, "user-a", true);
+
+        verify(participantRepository).setPinned(id, "user-a", true);
+    }
+
+    @Test
+    void setArchived_updatesParticipantFlag() {
+        UUID id = UUID.randomUUID();
+        ConversationParticipant p = ConversationParticipant.builder()
+                .conversation(Conversation.builder().id(id).build())
+                .user(User.builder().id("user-a").build()).build();
+        when(participantRepository.findByConversation_IdAndUser_Id(id, "user-a"))
+                .thenReturn(Optional.of(p));
+
+        conversationService.setArchived(id, "user-a", true);
+
+        verify(participantRepository).setArchived(id, "user-a", true);
+    }
+
+    @Test
+    void setPinned_rejectsNonParticipant() {
+        UUID id = UUID.randomUUID();
+        when(participantRepository.findByConversation_IdAndUser_Id(id, "ghost"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> conversationService.setPinned(id, "ghost", true))
+                .isInstanceOf(EntityNotFoundException.class);
+    }
+
+    @Test
+    void getGroupMembers_returnsAdminsFirstWithSelfFlag() {
+        UUID id = UUID.randomUUID();
+        Conversation group = Conversation.builder().id(id).type(ConversationType.GROUP).name("Team").build();
+        User admin = User.builder().id("admin").firstName("Ada").lastName("Min").build();
+        User bob = User.builder().id("bob").firstName("Bob").lastName("B").build();
+        ConversationParticipant pAdmin = ConversationParticipant.builder()
+                .conversation(group).user(admin).role(ParticipantRole.ADMIN).build();
+        ConversationParticipant pBob = ConversationParticipant.builder()
+                .conversation(group).user(bob).role(ParticipantRole.MEMBER).build();
+        when(conversationRepository.findById(id)).thenReturn(Optional.of(group));
+        when(participantRepository.findByConversation_IdAndUser_Id(id, "bob"))
+                .thenReturn(Optional.of(pBob));
+        when(participantRepository.findByConversation_Id(id)).thenReturn(List.of(pBob, pAdmin));
+
+        List<GroupMemberResponse> members = conversationService.getGroupMembers(id, "bob");
+
+        assertThat(members).hasSize(2);
+        assertThat(members.get(0).getId()).isEqualTo("admin");
+        assertThat(members.get(0).getRole()).isEqualTo(ParticipantRole.ADMIN);
+        assertThat(members.get(1).isSelf()).isTrue();
+        assertThat(members.get(1).getName()).isEqualTo("Bob B");
+    }
+
+    @Test
+    void getGroupMembers_rejectsPrivateConversation() {
+        UUID id = UUID.randomUUID();
+        when(conversationRepository.findById(id)).thenReturn(
+                Optional.of(Conversation.builder().id(id).type(ConversationType.PRIVATE).build()));
+
+        assertThatThrownBy(() -> conversationService.getGroupMembers(id, "alice"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

@@ -40,6 +40,10 @@ public class UserMapper {
     }
 
     public UserResponse toUserResponse(User user, boolean online) {
+        return toUserResponse(user, online, null);
+    }
+
+    public UserResponse toUserResponse(User user, boolean online, String avatarUrl) {
         return UserResponse.builder()
                 .id(user.getId())
                 .firstName(user.getFirstName())
@@ -47,6 +51,7 @@ public class UserMapper {
                 .email(user.getEmail())
                 .online(online)
                 .lastSeen(user.getLastSeen())
+                .avatarUrl(avatarUrl)
                 .build();
     }
 }

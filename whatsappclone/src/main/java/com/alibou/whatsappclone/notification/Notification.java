@@ -22,4 +22,6 @@ public class Notification {
     private final Long messageId;
     private final MessageResponse message;
     private final boolean typing;
+    /** Opaque signaling payload (WebRTC SDP / ICE JSON). Never persisted. */
+    private final String payload;
 }
