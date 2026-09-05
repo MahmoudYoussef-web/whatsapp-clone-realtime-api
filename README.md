@@ -8,11 +8,29 @@ Real-time messaging backend engineered for **correct delivery** — receiver-dri
 
 </div>
 
+## Demo
+
+> 🎬 **Watch it in action** — [1-minute demo video](https://youtu.be/sQ1lk4SupzI)
+
 <p align="center">
-  <img src="docs/screenshots/swagger-ui.png" width="800" alt="Swagger UI - full endpoint list"/>
+  <img src="docs/screenshots/chat-dark.png" width="800" alt="Chat UI — dark mode"/>
+</p>
+<p align="center">
+  <img src="docs/screenshots/chat-light.png" width="800" alt="Chat UI — light mode"/>
 </p>
 
+<details>
+<summary><b>More screenshots</b></summary>
+
+| Group info & members | Status stories | Voice call |
+|---|---|---|
+| <img src="docs/screenshots/group-info.png" width="260" alt="Group info modal"/> | <img src="docs/screenshots/status.png" width="260" alt="Status stories"/> | <img src="docs/screenshots/voice-call.png" width="260" alt="Voice call overlay"/> |
+
+</details>
+
 ## Badges
+
+[![CI](https://github.com/MahmoudYoussef-web/whatsapp-clone-realtime-api/actions/workflows/build.yml/badge.svg)](https://github.com/MahmoudYoussef-web/whatsapp-clone-realtime-api/actions/workflows/build.yml)
 
 [![Java](https://img.shields.io/badge/Java-17-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://www.java.com/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4.13-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
@@ -37,6 +55,7 @@ Real-time messaging backend engineered for **correct delivery** — receiver-dri
 
 ## Table of Contents
 
+- [Demo](#demo)
 - [Overview — Design decisions that go beyond a typical CRUD API](#overview)
 - [System Architecture](#system-architecture)
 - [Sequence Diagram — Message Lifecycle](#sequence-diagram--message-lifecycle)
@@ -100,19 +119,23 @@ graph TD
         end
 
         subgraph BusinessLayer["Business Layer"]
-            CONVC[ConversationController]
-            MSGC[MessageController]
-            USERC[UserController]
-            REALTIME[RealtimeController<br/>/app/typing · /app/message-ack]
+            CONVC[ConversationController<br/>private + groups + pin/archive]
+            MSGC[MessageController<br/>send/media/forward/search/info]
+            USERC[UserController<br/>+ avatar upload]
+            STATUSC[StatusController<br/>24h stories]
+            REALTIME[RealtimeController<br/>/app/typing · /app/message-ack · /app/call-signal]
         end
 
         subgraph Services["Services"]
             CONSVC[ConversationService]
             MSSVC[MessageService]
             TYPSVC[TypingService]
+            CALLSVC[CallService<br/>WebRTC signaling relay]
+            STATUSSVC[StatusService<br/>+ hourly expiry sweep]
             NOTIF[NotificationService]
             PRES[PresenceService]
-            STORAGE[FileStorageService]
+            STORAGE[FileStorageService<br/>+ image thumbnails]
+            RATELIMIT[RateLimitFilter<br/>60 mutating req/min]
         end
     end
 
@@ -120,30 +143,38 @@ graph TD
         PG[(PostgreSQL 16)]
         REDIS[(Redis 7)]
         MINIO[(MinIO — S3 compatible)]
+        TURN[(coturn — TURN relay)]
     end
 
     UI -->|REST · Bearer JWT| CORS
     UI -->|STOMP over WS /ws| WSINTERCEPT
-    CORS --> JWT --> SYNC
+    CORS --> JWT --> RATELIMIT --> SYNC
     SYNC --> CONVC
     SYNC --> MSGC
     SYNC --> USERC
+    SYNC --> STATUSC
     WSINTERCEPT --> SECTX --> REALTIME
     CONVC --> CONSVC
     MSGC --> MSSVC
+    STATUSC --> STATUSSVC
     REALTIME --> TYPSVC
     REALTIME --> MSSVC
+    REALTIME --> CALLSVC
     MSSVC --> NOTIF
     MSSVC --> STORAGE
+    STATUSSVC --> STORAGE
     TYPSVC --> NOTIF
+    CALLSVC --> NOTIF
     CONSVC --> PG
     MSSVC --> PG
+    STATUSSVC --> PG
     PRES --> REDIS
     STORAGE --> MINIO
     NOTIF -->|"/user/{id}/chat"| STOMP
     UI -->|OIDC authorize| KC
     KC -->|JWT · issuer| JWT
     MINIO -->|presigned GET URLs| UI
+    STOMP -->|P2P audio via STUN/TURN| TURN
 ```
 
 ---
@@ -203,31 +234,45 @@ sequenceDiagram
 
 ### 💬 Core Messaging
 - **Text messages** with optional **reply-to** (validated to the same conversation, masked if the parent was deleted)
-- **Attachments** — images, video, audio, documents via MinIO, delivered as **presigned URLs** (15 min TTL)
+- **Attachments** — images, video, audio, documents via MinIO, delivered as **presigned URLs** (15 min TTL); images get **320px thumbnails** so the chat list never downloads originals
 - **Message lifecycle `SENT → DELIVERED → READ`** with guarded, never-downgrading transitions
 - **Receiver-driven delivery receipts** — live ACK over WebSocket + **offline delivery** on history load
 - **Cursor pagination** for history (`before` + `limit`, `hasMore`, max 100/page) with zero N+1 on attachments
 - **Edit** (`edited` / `editedAt`) and **soft-delete** with two modes: `me` (hides for the deleter) and `everyone` (masks content + attachments for all, including previews)
 - **Idempotent private conversation creation** — no duplicate chats between the same two users; self-chats rejected
 - **Unread counters** per participant (atomic updates) + **last-message preview** pinned on every send
+- **Group chats** — create/rename, admin-managed members (add/remove), leave, group avatar, member roster with roles
+- **Voice notes** — in-browser recording (MediaRecorder) sent as audio attachments with inline playback
+- **Forward + message info** — forwarded badge, forward-to-any-chat, per-message read approximation ("read by…")
+- **In-conversation search** (trigram index) with click-to-jump + highlight
+- **Pin / archive** per participant (pinned sorts first), unread divider, per-user avatar uploads
+
+### 💬 Status & Calls
+- **Status stories (24h)** — text/photo/video, per-user feed, hourly expiry sweep (DB + MinIO cleanup)
+- **1:1 voice calls (WebRTC)** — signaling relayed over STOMP (`CALL_OFFER/ANSWER/ICE/END`), P2P audio via STUN/coturn; nothing recorded server-side
+
+### 🌍 Frontend
+- **Angular 19** — dark/light theme, **Arabic/English + RTL**, PWA installable (Angular service worker), Smart list dates + read ticks, fullscreen media viewer with zoom
 
 ### ⚡ Realtime & Presence
 - **Live typing indicators** (`/app/typing`) relayed only to other participants
-- **WebSocket notifications** on `/user/{id}/chat` — `MESSAGE`, `DELIVERED`, `READ`, `TYPING`, `MESSAGE_EDITED`, `MESSAGE_DELETED`
+- **WebSocket notifications** on `/user/{id}/chat` — `MESSAGE`, `DELIVERED`, `READ`, `TYPING`, `MESSAGE_EDITED`, `MESSAGE_DELETED`, `REACTION_*`, `MEMBER_ADDED/REMOVED`, `GROUP_INFO_UPDATED`, `CALL_OFFER/ANSWER/ICE/END`
 - **Presence via Redis** — `presence:user:{id}` key with a 60 s sliding TTL, refreshed on every STOMP frame, cleaned on DISCONNECT; **graceful degradation** if Redis is unreachable
 - **Online status** surfaced in the user list and conversation list (with `lastSeen` fallback)
 
 ### 🗄️ Data & Integrity
-- **Flyway-owned schema** (V1: core model, V2: message features) with `ddl-auto: validate` boot-time contract check
-- **Composite index `(conversation_id, id)`** for cursor pagination; participant/attachment indexes
+- **Flyway-owned schema** (V1–V10: conversations → reactions → groups → forward → search → avatars → status → thumbnails) with `ddl-auto: validate` boot-time contract check
+- **Composite index `(conversation_id, id)`** for cursor pagination; participant/attachment indexes; **trigram index** for message search
 - **Atomic counters and guarded status transitions** — no read-modify-write races anywhere in the hot path
 - **Caffeine-throttled user sync** — each user synced from the IdP at most once per 60 s
 
 ### 📊 Observability & DX
 - **SpringDoc OpenAPI / Swagger UI** — live API docs at `/swagger-ui/index.html`
-- **Spring Boot Actuator** health/metrics endpoints
+- **Spring Boot Actuator** health/metrics endpoints (+ `whatsapp.messages.sent` counter by kind)
+- **Rate limiting** — 60 mutating requests/min per user (RFC 7807 `429`), dependency-free fixed window
+- **GitHub Actions CI** — backend `mvn verify` (incl. Testcontainers) + frontend build + compose validation on every push/PR
 - **RFC 7807 ProblemDetail** error responses with stable HTTP semantics (404/400/422-style validation, generic storage errors without internal leaks)
-- **60 tests, 0 failures** — 53 unit tests (Mockito) + 7 Testcontainers integration tests against real PostgreSQL 16
+- **84 tests, 0 failures** — 77 unit tests (Mockito) + 7 Testcontainers integration tests against real PostgreSQL 16
 - **13 Architecture Decision Records** documenting every non-trivial choice in `docs/decisions/`
 
 > 🤖 **No AI features** in this project — no LLM integration, no content intelligence. Not a gap, a deliberate scope decision.
@@ -251,6 +296,28 @@ Base URL: `http://localhost:8080` — every endpoint requires `Authorization: Be
 | `PATCH` | `/api/v1/conversations/{conversationId}/read` | Mark received messages as READ + reset unread counter |
 | `PATCH` | `/api/v1/conversations/{conversationId}/messages/{messageId}` | Edit a message (sender only) |
 | `DELETE` | `/api/v1/conversations/{conversationId}/messages/{messageId}?mode=me\|everyone` | Soft-delete a message (sender only) |
+| `POST` | `/api/v1/conversations/groups` | Create a group — body `{ "name": "...", "memberIds": [...] }` (creator becomes admin) |
+| `GET` | `/api/v1/conversations/{conversationId}/members` | Group roster: roles, avatars, self flag |
+| `POST` | `/api/v1/conversations/{conversationId}/members` | Add a member (admin only) |
+| `DELETE` | `/api/v1/conversations/{conversationId}/members/{userId}` | Remove a member (admin only) |
+| `POST` | `/api/v1/conversations/{conversationId}/leave` | Leave a group |
+| `PATCH` | `/api/v1/conversations/{conversationId}/name` | Rename a group (admin only) |
+| `POST` | `/api/v1/conversations/{conversationId}/avatar` | Upload group avatar (admin only) |
+| `PATCH` | `/api/v1/conversations/{conversationId}/pin` | Pin/unpin chat — body `{ "value": true }` |
+| `PATCH` | `/api/v1/conversations/{conversationId}/archive` | Archive/unarchive chat |
+| `POST` | `/api/v1/conversations/{conversationId}/messages/{messageId}/forward` | Forward to another conversation — body `{ "targetConversationId": "..." }` |
+| `GET` | `/api/v1/conversations/{conversationId}/messages/{messageId}/info` | Message info: per-participant read approximation |
+| `GET` | `/api/v1/conversations/{conversationId}/messages/search?q=...` | In-conversation text search (max 20 hits) |
+| `POST` | `/api/v1/conversations/{conversationId}/messages/{messageId}/reactions` | Add/update reaction — body `{ "emoji": "👍" }` |
+| `DELETE` | `/api/v1/conversations/{conversationId}/messages/{messageId}/reactions` | Remove own reaction |
+| `GET` | `/api/v1/users/me` | Own profile (with avatar URL) |
+| `POST` | `/api/v1/users/me/avatar` | Upload profile avatar (`multipart/form-data`) |
+| `POST` | `/api/v1/status` | Post a text status (24h TTL) |
+| `POST` | `/api/v1/status/media` | Post a photo/video status |
+| `GET` | `/api/v1/status/feed` | Status feed grouped per user (unexpired only) |
+| `DELETE` | `/api/v1/status/{statusId}` | Delete own status |
+
+Call signaling travels over STOMP (`/app/call-signal` with `{ conversationId, targetUserId, signal, payload }`) — see the WebSocket table below.
 
 <details>
 <summary><b>Example — send a message</b></summary>
@@ -290,10 +357,6 @@ Content-Type: application/json
 ```
 
 </details>
-
-<p align="center">
-  <img src="docs/screenshots/message-flow.png" width="800" alt="Swagger UI - executing a live authenticated request"/>
-</p>
 
 <details>
 <summary><b>Example — upload an attachment</b></summary>
@@ -349,6 +412,7 @@ file: photo.jpg (binary)
 | Subscribe | `/user/{sub}/chat` | — | Notification queue (types: `MESSAGE`, `DELIVERED`, `READ`, `TYPING`, `MESSAGE_EDITED`, `MESSAGE_DELETED`) |
 | Send | `/app/typing` | `{ "conversationId": "...", "typing": true }` | Typing indicator (relayed to other participants only) |
 | Send | `/app/message-ack` | `{ "messageId": 43 }` | Delivery receipt: `SENT → DELIVERED` |
+| Send | `/app/call-signal` | `{ "conversationId": "...", "targetUserId": "...", "signal": "CALL_OFFER", "payload": "<SDP/ICE JSON>" }` | 1:1 voice-call signaling (signals: `CALL_OFFER/ANSWER/ICE/END`; audio is P2P via STUN/coturn) |
 
 **Connection requirements**
 
@@ -433,7 +497,7 @@ erDiagram
     }
 ```
 
-Owned by Flyway migrations (`V1__init_conversations.sql`, `V2__message_features.sql`); Hibernate validates against it at boot (`ddl-auto: validate`). Key indexes: `(conversation_id, id)` for cursor pagination, `conversation_participants(user_id)` for the conversation list, `attachments(message_id)`.
+Owned by Flyway migrations (`V1`–`V10`: conversations, message features, reactions, deletions, groups, forward flag, trigram search, avatars/pin/archive, statuses, thumbnails); Hibernate validates against it at boot (`ddl-auto: validate`). Key indexes: `(conversation_id, id)` for cursor pagination, `conversation_participants(user_id)` for the conversation list, `attachments(message_id)`, trigram index on message content.
 
 > Full visual ERD: `resources/erd.png` — the same model rendered with actual cardinalities.
 
@@ -448,14 +512,16 @@ Owned by Flyway migrations (`V1__init_conversations.sql`, `V2__message_features.
 | Security | Spring Security OAuth2 Resource Server | Keycloak 26 as JWT issuer |
 | Realtime | Spring WebSocket + STOMP + SockJS | Simple broker on `/user`, `spring-security-messaging` for the context bridge |
 | Persistence | Spring Data JPA (Hibernate) | `ddl-auto: validate` only — Flyway owns the schema |
-| Migrations | Flyway | `V1`, `V2` in `classpath:db/migration` |
+| Migrations | Flyway | `V1`–`V10` in `classpath:db/migration` |
 | Database | PostgreSQL 16 | via `docker-compose.yml` |
 | Cache | Redis 7 (presence) · Caffeine (user-sync throttle) | Redis TTL keys `presence:user:{id}` |
 | Object storage | MinIO via AWS SDK v2 S3 | Presigned GET URLs, 15 min TTL |
 | API docs | SpringDoc OpenAPI 2.8.17 | Swagger UI + generated client (`ng-openapi-gen`) |
 | Ops | Spring Boot Actuator | Health/metrics |
-| Tests | JUnit 5 · Mockito · Testcontainers | 60 tests: 53 unit + 7 integration (real PostgreSQL) |
-| Deployment | Docker Compose | postgres:16-alpine · keycloak:26.0.0 · minio · redis:7-alpine |
+| Tests | JUnit 5 · Mockito · Testcontainers | 84 tests: 77 unit + 7 integration (real PostgreSQL) |
+| Deployment | Docker Compose | postgres:16-alpine · keycloak:26.0.0 · minio · redis:7-alpine · coturn |
+| Frontend | Angular 19 + PWA | Dark/light, ar/en + RTL, service-worker offline shell |
+| CI | GitHub Actions | Backend verify + frontend build + compose check |
 
 **Honest dependency audit:** every dependency declared in `pom.xml` is actually wired and exercised — there is no dead weight (no resilience/queue libraries like Resilience4j or Quartz are declared; Caffeine is used directly by `UserSynchronizer`).
 
@@ -477,10 +543,11 @@ Protection is layered — REST, WebSocket, and data access each have their own e
 
 | Limitation | Impact | Status |
 |---|---|---|
-| CSRF disabled (`csrf.disable()`) + CORS pinned to `http://localhost:4200` | Dev-stage posture; fine for a portfolio/demo, must be revisited before any real deployment | Deliberate for dev |
-| `ConversationType`/`ParticipantRole` are multi-party-ready, but **group chat creation logic does not exist** | Only private (2-user) conversations are creatable today | Enum ready, service missing |
-| Read receipts are **conversation-wide**, not per-message | Opening a chat marks all received messages READ; no per-message blue ticks | Phase scope (ADR-0010) |
+| CSRF disabled (`csrf.disable()`) + CORS from env (`APP_CORS_ALLOWED_ORIGINS`, default `http://localhost:4200`) | Dev-stage posture; fine for a portfolio/demo, must be revisited before any real deployment | Deliberate for dev |
+| Read receipts are **conversation-wide**, not per-message | Opening a chat marks all received messages READ; message info is an approximation | Phase scope (ADR-0010) |
 | Presence = **one WebSocket connection per user** (last connection wins) | A second tab kicks the first one offline | Documented in root README |
+| Voice calls are **1:1 audio only** (spike) | No video, no group calls; no ringing persistence when callee is offline | Spike scope |
+| Status feed covers **all users** (no contacts model) | Anyone's story is visible to anyone authenticated | Simplification |
 | **No end-to-end encryption** | Server stores plaintext content; media in MinIO is unencrypted at rest | Out of scope |
 | **No multi-device sync** | Delivery/read state is single-device semantics | Out of scope |
 | **No media upload progress / resumable uploads** | Single multipart upload, 100 MB request cap | Out of scope |
@@ -501,9 +568,9 @@ Protection is layered — REST, WebSocket, and data access each have their own e
 docker compose up -d
 ```
 
-Starts PostgreSQL 16 (5432), Keycloak 26 (9090), MinIO (9000/9001), Redis 7 (6379) on the `whatsapp-clone` network.
+Starts PostgreSQL 16 (5432), Keycloak 26 (9090, realm auto-imported from `keycloak/realm.json` with demo users alice/bob), MinIO (9000/9001, bucket auto-created), Redis 7 (6379) and coturn (3478) on the `whatsapp-clone` network. Copy `.env.example` to `.env` to override ports/credentials.
 
-### 2. Provision Keycloak (first time only)
+### 2. Provision Keycloak (only if you skip the auto-import)
 
 ```bash
 # 1. Open http://localhost:9090 — login admin / admin
@@ -522,15 +589,15 @@ cd whatsappclone
 mvn spring-boot:run
 ```
 
-Flyway applies `V1`/`V2` on startup; the app boots only if the schema matches the entities (`ddl-auto: validate`). API: `http://localhost:8080`, Swagger UI: `http://localhost:8080/swagger-ui/index.html`.
+Flyway applies `V1`–`V10` on startup; the app boots only if the schema matches the entities (`ddl-auto: validate`). API: `http://localhost:8080`, Swagger UI: `http://localhost:8080/swagger-ui/index.html`.
 
-### 4. Start the frontend (optional, Angular 19)
+### 4. Start the frontend (optional, Angular 19 PWA)
 
 ```bash
 cd whatsapp-clone-ui
 npm install
-npm run api-gen   # regenerate API client from src/openapi/openapi.json
-npm start         # http://localhost:4200
+npm start         # http://localhost:4200 (dev)
+npm run build     # production + service worker to dist/
 ```
 
 ---
@@ -542,7 +609,7 @@ cd whatsappclone
 mvn verify
 ```
 
-**60 tests: 53 unit (JUnit 5 · Mockito) + 7 integration (Testcontainers)** against a real PostgreSQL 16 — no mocks for the schema. Integration tests spin up PostgreSQL via Testcontainers (auto-skipped without Docker). Docker Desktop on engine 29+ is pinned to API 1.44 via `src/test/resources/docker-java.properties` (ADR-0008).
+**84 tests: 77 unit (JUnit 5 · Mockito) + 7 integration (Testcontainers)** against a real PostgreSQL 16 — no mocks for the schema. Integration tests spin up PostgreSQL via Testcontainers (auto-skipped without Docker). Docker Desktop on engine 29+ is pinned to API 1.44 via `src/test/resources/docker-java.properties` (ADR-0008).
 
 ---
 
@@ -553,20 +620,29 @@ whatsapp-clone-main/
 ├── whatsappclone/                 # Spring Boot backend
 │   └── src/main/java/com/alibou/whatsappclone/
 │       ├── common/                # BaseAuditingEntity, StringResponse
-│       ├── conversation/          # Model, controller, service, repositories, mapper
-│       ├── message/               # Lifecycle, repository (guarded updates), mapper, DTOs
+│       ├── conversation/          # Private + group chats, pin/archive, member roster
+│       ├── message/               # Lifecycle, forward/search/info, thumbnails, reactions
 │       ├── notification/          # WebSocket notification payloads + publisher
 │       ├── presence/              # Redis presence + STOMP channel interceptor
-│       ├── security/              # JWT authorities converter, SecurityFilterChain
-│       ├── storage/               # MinIO, whitelist validator, presigned URLs
-│       ├── user/                  # User entity + IdP sync (Caffeine-throttled)
-│       ├── ws/                    # WebSocketConfig, RealtimeController, TypingService
+│       ├── security/              # JWT authorities converter, split SecurityFilterChains
+│       ├── storage/               # MinIO, whitelist validator, presigned URLs, avatars
+│       ├── user/                  # User entity + IdP sync (Caffeine-throttled) + avatar
+│       ├── status/                # 24h stories + hourly expiry sweep
+│       ├── ratelimit/             # Fixed-window 429 filter (no extra deps)
+│       ├── ws/                    # WebSocketConfig, RealtimeController, TypingService, CallService
 │       ├── interceptor/           # UserSynchronizerFilter
 │       └── exception/             # GlobalExceptionHandler (ProblemDetail)
-├── whatsapp-clone-ui/             # Angular 19 frontend (SockJS/STOMP, Keycloak)
+├── whatsapp-clone-ui/             # Angular 19 PWA (SockJS/STOMP, Keycloak, ar/en + RTL)
+│   └── src/app/
+│       ├── components/            # chat-list, message-bubble, media-viewer, group-info, status-strip
+│       ├── pages/main/            # Chat shell: composer, voice notes, calls, search, modals
+│       ├── services/              # Hand-written group/status/call/profile/message extras
+│       └── i18n/                  # en + ar dictionaries, dir handling
+├── .github/workflows/             # CI: backend verify + frontend build
 ├── docs/decisions/                # 13 ADRs (0001–0013)
+├── docs/screenshots/              # UI captures (see Demo)
 ├── resources/                     # ERD diagram, design assets
-└── docker-compose.yml             # postgres, keycloak, minio, redis
+└── docker-compose.yml             # postgres, keycloak, minio, redis, coturn
 ```
 
 ---
