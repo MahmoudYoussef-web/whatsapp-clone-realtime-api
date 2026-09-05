@@ -18,6 +18,7 @@ import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBr
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
+import java.util.Arrays;
 import java.util.List;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON;
@@ -31,6 +32,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private final ObjectMapper objectMapper;
     private final UserPresenceChannelInterceptor userPresenceChannelInterceptor;
 
+    @org.springframework.beans.factory.annotation.Value("${app.ws.allowed-origins:http://localhost:4200}")
+    private String wsAllowedOrigins;
+
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
         registry.enableSimpleBroker("/user");
@@ -40,9 +44,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        String[] origins = Arrays.stream(wsAllowedOrigins.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toArray(String[]::new);
         registry
                 .addEndpoint("/ws")
-                .setAllowedOrigins("http://localhost:4200")
+                .setAllowedOrigins(origins)
                 .withSockJS();
     }
 

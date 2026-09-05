@@ -60,7 +60,24 @@ public class MinioConfig {
             client.headBucket(HeadBucketRequest.builder().bucket(bucket).build());
         } catch (NoSuchBucketException e) {
             log.info("Bucket '{}' does not exist yet, creating it", bucket);
-            client.createBucket(CreateBucketRequest.builder().bucket(bucket).build());
+            try {
+                client.createBucket(CreateBucketRequest.builder().bucket(bucket).build());
+            } catch (Exception createEx) {
+                log.warn("Could not create bucket '{}', continuing startup", bucket, createEx);
+            }
+        } catch (software.amazon.awssdk.services.s3.model.S3Exception e) {
+            if (e.statusCode() == 404) {
+                log.info("Bucket '{}' missing (404), creating it", bucket);
+                try {
+                    client.createBucket(CreateBucketRequest.builder().bucket(bucket).build());
+                } catch (Exception createEx) {
+                    log.warn("Could not create bucket '{}', continuing startup", bucket, createEx);
+                }
+            } else {
+                log.warn("MinIO not reachable at startup, skipping bucket check", e);
+            }
+        } catch (Exception e) {
+            log.warn("MinIO not reachable at startup, skipping bucket check", e);
         }
     }
 }
