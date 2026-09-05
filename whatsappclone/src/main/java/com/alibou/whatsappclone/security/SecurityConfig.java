@@ -1,6 +1,7 @@
 package com.alibou.whatsappclone.security;
 
 import com.alibou.whatsappclone.interceptor.UserSynchronizerFilter;
+import com.alibou.whatsappclone.ratelimit.RateLimitFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -26,6 +27,7 @@ import static org.springframework.security.config.Customizer.withDefaults;
 public class SecurityConfig {
 
     private final UserSynchronizerFilter userSynchronizerFilter;
+    private final RateLimitFilter rateLimitFilter;
 
     @Value("${app.cors.allowed-origins:http://localhost:4200}")
     private String allowedOrigins;
@@ -66,9 +68,9 @@ public class SecurityConfig {
                 .oauth2ResourceServer(auth ->
                         auth.jwt(token ->
                                 token.jwtAuthenticationConverter(new KeycloakJwtAuthenticationConverter())))
-                // Runs AFTER BearerTokenAuthenticationFilter so the SecurityContext is
-                // already populated with the authenticated JwtAuthenticationToken.
-                .addFilterAfter(userSynchronizerFilter, BearerTokenAuthenticationFilter.class);
+                // Shed abusive load before the DB-touching user-sync filter.
+                .addFilterAfter(rateLimitFilter, BearerTokenAuthenticationFilter.class)
+                .addFilterAfter(userSynchronizerFilter, RateLimitFilter.class);
         return http.build();
     }
 

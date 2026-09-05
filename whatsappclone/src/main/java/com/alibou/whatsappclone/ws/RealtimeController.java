@@ -22,6 +22,7 @@ public class RealtimeController {
 
     private final TypingService typingService;
     private final MessageService messageService;
+    private final CallService callService;
 
     @MessageMapping("/typing")
     public void typing(@Payload TypingRequest request, @AuthenticationPrincipal Jwt jwt) {
@@ -31,5 +32,11 @@ public class RealtimeController {
     @MessageMapping("/message-ack")
     public void acknowledge(@Payload MessageAckRequest request, @AuthenticationPrincipal Jwt jwt) {
         messageService.acknowledgeDelivered(request.messageId(), jwt.getSubject());
+    }
+
+    @MessageMapping("/call-signal")
+    public void callSignal(@Payload CallSignalRequest request, @AuthenticationPrincipal Jwt jwt) {
+        callService.relaySignal(request.conversationId(), jwt.getSubject(),
+                request.targetUserId(), request.signal(), request.payload());
     }
 }

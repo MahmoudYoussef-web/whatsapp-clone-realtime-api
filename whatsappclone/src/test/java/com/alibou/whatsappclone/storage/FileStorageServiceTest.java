@@ -111,4 +111,20 @@ class FileStorageServiceTest {
         assertThat(MediaTypeValidator.categoryFor("image/jpeg")).contains(MediaTypeValidator.Category.IMAGE);
         assertThat(MediaTypeValidator.categoryFor("application/pdf")).contains(MediaTypeValidator.Category.DOCUMENT);
     }
+
+    @Test
+    void upload_acceptsVoiceNoteFormats() {
+        when(properties.bucket()).thenReturn("whatsapp-media");
+        byte[] bytes = new byte[]{1, 2, 3, 4};
+
+        StoredFile weba = fileStorageService.upload(
+                new MockMultipartFile("file", "voice-note.weba", "audio/webm", bytes), "u1", "c1");
+        StoredFile m4a = fileStorageService.upload(
+                new MockMultipartFile("file", "voice-note.m4a", "audio/mp4", bytes), "u1", "c1");
+
+        assertThat(weba.mimeType()).isEqualTo("audio/webm");
+        assertThat(m4a.mimeType()).isEqualTo("audio/mp4");
+        assertThat(MediaTypeValidator.categoryFor(weba.mimeType()))
+                .contains(MediaTypeValidator.Category.AUDIO);
+    }
 }

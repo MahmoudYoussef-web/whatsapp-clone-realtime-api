@@ -1,5 +1,6 @@
 package com.alibou.whatsappclone.message;
 
+import com.alibou.whatsappclone.reaction.ReactionResponse;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -23,4 +24,6 @@ public class MessageResponse {
     private final boolean edited;
     private final LocalDateTime editedAt;
     private final boolean deleted;
+    private final boolean forwarded;
+    private final List<ReactionResponse> reactions;
 }

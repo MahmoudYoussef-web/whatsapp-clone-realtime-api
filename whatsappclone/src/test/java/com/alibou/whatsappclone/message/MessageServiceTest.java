@@ -7,6 +7,7 @@ import com.alibou.whatsappclone.conversation.ConversationService;
 import com.alibou.whatsappclone.notification.Notification;
 import com.alibou.whatsappclone.notification.NotificationService;
 import com.alibou.whatsappclone.notification.NotificationType;
+import com.alibou.whatsappclone.reaction.ReactionService;
 import com.alibou.whatsappclone.storage.FileStorageService;
 import com.alibou.whatsappclone.storage.StoredFile;
 import com.alibou.whatsappclone.user.User;
@@ -29,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -44,6 +46,9 @@ class MessageServiceTest {
     private AttachmentRepository attachmentRepository;
 
     @Mock
+    private MessageDeletionRepository messageDeletionRepository;
+
+    @Mock
     private ConversationParticipantRepository participantRepository;
 
     @Mock
@@ -57,6 +62,9 @@ class MessageServiceTest {
 
     @Mock
     private FileStorageService fileStorageService;
+
+    @Mock
+    private ReactionService reactionService;
 
     @InjectMocks
     private MessageService messageService;
@@ -89,7 +97,7 @@ class MessageServiceTest {
         when(conversationService.getOtherParticipantIds(conversationId, "sender")).thenReturn(List.of("receiver"));
         Message saved = message(1L, self);
         when(messageRepository.save(any(Message.class))).thenReturn(saved);
-        when(mapper.toResponse(saved, "sender")).thenReturn(response(1L));
+        when(mapper.toResponse(eq(saved), eq("sender"), any(), any())).thenReturn(response(1L));
 
         messageService.sendTextMessage(conversationId, "sender", new SendMessageRequest("hi", MessageType.TEXT));
 
@@ -115,7 +123,7 @@ class MessageServiceTest {
         Message saved = message(8L, self);
         when(messageRepository.findById(7L)).thenReturn(Optional.of(replyTarget));
         when(messageRepository.save(any(Message.class))).thenReturn(saved);
-        when(mapper.toResponse(saved, "sender")).thenReturn(response(8L));
+        when(mapper.toResponse(eq(saved), eq("sender"), any(), any())).thenReturn(response(8L));
 
         messageService.sendTextMessage(conversationId, "sender",
                 new SendMessageRequest("reply", MessageType.TEXT, 7L));
@@ -152,7 +160,7 @@ class MessageServiceTest {
         Attachment attachment = Attachment.builder().id(1L).message(saved).objectKey(stored.objectKey())
                 .bucket(stored.bucket()).mimeType(stored.mimeType()).sizeBytes(1024L).build();
         when(attachmentRepository.save(any(Attachment.class))).thenReturn(attachment);
-        when(mapper.toResponse(saved, "sender")).thenReturn(response(1L));
+        when(mapper.toResponse(eq(saved), eq("sender"), any(), any())).thenReturn(response(1L));
 
         MockMultipartFile file = new MockMultipartFile("file", "clip.mp4", "video/mp4", new byte[]{1, 2, 3});
         MessageResponse response = messageService.uploadAttachment(conversationId, "sender", file);
@@ -176,7 +184,7 @@ class MessageServiceTest {
         when(messageRepository.save(any(Message.class))).thenReturn(saved);
         when(attachmentRepository.save(any(Attachment.class))).thenReturn(
                 Attachment.builder().id(1L).message(saved).build());
-        when(mapper.toResponse(saved, "sender")).thenReturn(response(1L));
+        when(mapper.toResponse(eq(saved), eq("sender"), any(), any())).thenReturn(response(1L));
 
         MockMultipartFile file = new MockMultipartFile("file", "doc.pdf", "application/pdf", new byte[]{1});
         messageService.uploadAttachment(conversationId, "sender", file);
@@ -198,7 +206,7 @@ class MessageServiceTest {
         when(messageRepository.findMessagesPage(eq(conversationId), eq(null), any()))
                 .thenReturn(List.of(m1, m2, m3));
         when(attachmentRepository.findByMessage_IdIn(List.of(5L, 4L))).thenReturn(List.of());
-        when(mapper.toResponses(any(), any(), eq("sender"))).thenReturn(List.of(
+        when(mapper.toResponses(any(), any(), eq("sender"), any(), any())).thenReturn(List.of(
                 response(5L), response(4L)));
 
         MessagePageResponse page = messageService.getMessages(conversationId, "sender", null, 2);
@@ -217,7 +225,7 @@ class MessageServiceTest {
         when(messageRepository.findMessagesPage(eq(conversationId), eq(4L), any()))
                 .thenReturn(List.of(m1));
         when(attachmentRepository.findByMessage_IdIn(List.of(5L))).thenReturn(List.of());
-        when(mapper.toResponses(any(), any(), eq("sender"))).thenReturn(List.of(response(5L)));
+        when(mapper.toResponses(any(), any(), eq("sender"), any(), any())).thenReturn(List.of(response(5L)));
 
         MessagePageResponse page = messageService.getMessages(conversationId, "sender", 4L, 30);
 
@@ -234,7 +242,7 @@ class MessageServiceTest {
         when(messageRepository.findMessagesPage(eq(conversationId), eq(null), any()))
                 .thenReturn(List.of(m1));
         when(attachmentRepository.findByMessage_IdIn(List.of(5L))).thenReturn(List.of());
-        when(mapper.toResponses(any(), any(), eq("sender"))).thenReturn(List.of(response(5L)));
+        when(mapper.toResponses(any(), any(), eq("sender"), any(), any())).thenReturn(List.of(response(5L)));
 
         messageService.getMessages(conversationId, "sender", null, 30);
 
@@ -297,7 +305,7 @@ class MessageServiceTest {
         when(conversationService.getOtherParticipantIds(conversationId, "sender")).thenReturn(List.of("receiver"));
         when(messageRepository.findByIdAndConversationId(1L, conversationId)).thenReturn(Optional.of(sent));
         when(messageRepository.save(sent)).thenReturn(sent);
-        when(mapper.toResponse(sent, "sender"))
+        when(mapper.toResponse(eq(sent), eq("sender"), any(), any()))
                 .thenReturn(MessageResponse.builder().id(1L).content("edited content").build());
 
         messageService.editMessage(conversationId, 1L, "sender", "edited content");
@@ -352,20 +360,54 @@ class MessageServiceTest {
     }
 
     @Test
-    void deleteMessage_forMeHidesFromSenderOnly() {
+    void deleteMessage_forMeHidesFromSenderOnlyAndDoesNotNotifyOthers() {
         Message sent = message(1L, self);
         when(conversationService.requireParticipant(conversationId, "sender")).thenReturn(participant("sender"));
-        when(conversationService.getOtherParticipantIds(conversationId, "sender")).thenReturn(List.of("receiver"));
         when(messageRepository.findByIdAndConversationId(1L, conversationId)).thenReturn(Optional.of(sent));
+        when(messageDeletionRepository.existsByMessage_IdAndUser_Id(1L, "sender")).thenReturn(false);
 
         messageService.deleteMessage(conversationId, 1L, "sender", "me");
 
-        assertThat(sent.isDeletedForSender()).isTrue();
+        ArgumentCaptor<MessageDeletion> captor = ArgumentCaptor.forClass(MessageDeletion.class);
+        verify(messageDeletionRepository).save(captor.capture());
+        assertThat(captor.getValue().getMessage().getId()).isEqualTo(1L);
+        assertThat(captor.getValue().getUser().getId()).isEqualTo("sender");
         assertThat(sent.isDeletedForEveryone()).isFalse();
+        // Delete-for-me is local - nobody else may learn about it.
+        verify(notificationService, never()).sendNotification(any(), any());
     }
 
     @Test
-    void deleteMessage_rejectsNonSender() {
+    void deleteMessage_forMe_allowsRecipientAndKeepsMessageForSender() {
+        Message received = message(1L, other);
+        when(conversationService.requireParticipant(conversationId, "receiver")).thenReturn(participant("receiver"));
+        when(messageRepository.findByIdAndConversationId(1L, conversationId)).thenReturn(Optional.of(received));
+        when(messageDeletionRepository.existsByMessage_IdAndUser_Id(1L, "receiver")).thenReturn(false);
+
+        messageService.deleteMessage(conversationId, 1L, "receiver", "me");
+
+        ArgumentCaptor<MessageDeletion> captor = ArgumentCaptor.forClass(MessageDeletion.class);
+        verify(messageDeletionRepository).save(captor.capture());
+        assertThat(captor.getValue().getUser().getId()).isEqualTo("receiver");
+        assertThat(received.isDeletedForEveryone()).isFalse();
+        verify(notificationService, never()).sendNotification(any(), any());
+    }
+
+    @Test
+    void deleteMessage_forMe_isIdempotentWhenAlreadyDeletedForViewer() {
+        Message sent = message(1L, self);
+        when(conversationService.requireParticipant(conversationId, "sender")).thenReturn(participant("sender"));
+        when(messageRepository.findByIdAndConversationId(1L, conversationId)).thenReturn(Optional.of(sent));
+        when(messageDeletionRepository.existsByMessage_IdAndUser_Id(1L, "sender")).thenReturn(true);
+
+        messageService.deleteMessage(conversationId, 1L, "sender", "me");
+
+        verify(messageDeletionRepository, never()).save(any());
+        verify(notificationService, never()).sendNotification(any(), any());
+    }
+
+    @Test
+    void deleteMessage_rejectsNonSenderForEveryoneMode() {
         Message sent = message(1L, self);
         when(conversationService.requireParticipant(conversationId, "receiver"))
                 .thenReturn(participant("receiver"));
@@ -402,5 +444,78 @@ class MessageServiceTest {
         messageService.markMessagesAsRead(conversationId, "receiver");
 
         verify(notificationService, never()).sendNotification(any(), any());
+    }
+
+    @Test
+    void forwardMessage_copiesContentAsForwardedAndNotifies() {
+        UUID targetId = UUID.randomUUID();
+        Conversation target = Conversation.builder().id(targetId).build();
+        ConversationParticipant targetParticipant = ConversationParticipant.builder()
+                .conversation(target).user(self).build();
+        Message source = message(10L, other);
+        Message saved = Message.builder().id(20L).conversation(target).sender(self)
+                .type(MessageType.TEXT).content("hi").status(MessageStatus.SENT)
+                .forwarded(true).attachments(List.of()).build();
+
+        when(conversationService.requireParticipant(conversationId, "sender")).thenReturn(participant("sender"));
+        when(conversationService.requireParticipant(targetId, "sender")).thenReturn(targetParticipant);
+        when(messageRepository.findByIdAndConversationId(10L, conversationId))
+                .thenReturn(Optional.of(source));
+        when(messageRepository.save(any(Message.class))).thenReturn(saved);
+        when(attachmentRepository.findByMessage_IdIn(List.of(10L))).thenReturn(List.of());
+        when(conversationService.getOtherParticipantIds(targetId, "sender")).thenReturn(List.of("receiver"));
+        when(mapper.toResponse(any(Message.class), eq("sender"))).thenReturn(response(20L));
+
+        MessageResponse result = messageService.forwardMessage(conversationId, 10L, targetId, "sender");
+
+        assertThat(result.getId()).isEqualTo(20L);
+        ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
+        verify(messageRepository).save(captor.capture());
+        assertThat(captor.getValue().isForwarded()).isTrue();
+        assertThat(captor.getValue().getContent()).isEqualTo("hi");
+        verify(participantRepository).incrementUnreadCount(targetId, "sender");
+        ArgumentCaptor<Notification> notif = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationService).sendNotification(eq("receiver"), notif.capture());
+        assertThat(notif.getValue().getType()).isEqualTo(NotificationType.MESSAGE);
+    }
+
+    @Test
+    void forwardMessage_rejectsDeletedSource() {
+        UUID targetId = UUID.randomUUID();
+        Message deleted = Message.builder().id(11L).conversation(conversation).sender(other)
+                .type(MessageType.TEXT).content("x").status(MessageStatus.SENT)
+                .deletedForEveryone(true).attachments(List.of()).build();
+        when(conversationService.requireParticipant(conversationId, "sender")).thenReturn(participant("sender"));
+        when(conversationService.requireParticipant(targetId, "sender"))
+                .thenReturn(ConversationParticipant.builder()
+                        .conversation(Conversation.builder().id(targetId).build()).user(self).build());
+        when(messageRepository.findByIdAndConversationId(11L, conversationId))
+                .thenReturn(Optional.of(deleted));
+
+        assertThatThrownBy(() -> messageService.forwardMessage(conversationId, 11L, targetId, "sender"))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void searchMessages_returnsMatchesNewestFirst() {
+        Message hit = message(5L, other);
+        when(conversationService.requireParticipant(conversationId, "sender")).thenReturn(participant("sender"));
+        when(messageRepository.searchMessages(eq(conversationId), eq("hi"), any()))
+                .thenReturn(List.of(hit));
+        when(attachmentRepository.findByMessage_IdIn(List.of(5L))).thenReturn(List.of());
+        when(mapper.toResponses(eq(List.of(hit)), anyMap(), eq("sender"))).thenReturn(List.of(response(5L)));
+
+        List<MessageResponse> results = messageService.searchMessages(conversationId, "sender", "hi");
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).getId()).isEqualTo(5L);
+    }
+
+    @Test
+    void searchMessages_blankQueryReturnsEmptyWithoutQuerying() {
+        List<MessageResponse> results = messageService.searchMessages(conversationId, "sender", "  ");
+
+        assertThat(results).isEmpty();
+        verify(messageRepository, never()).searchMessages(any(), any(), any());
     }
 }

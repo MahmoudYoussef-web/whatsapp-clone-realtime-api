@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -80,5 +81,34 @@ public class MessageController {
             @RequestParam(name = "mode", defaultValue = "everyone") String mode,
             Authentication authentication) {
         messageService.deleteMessage(conversationId, messageId, authentication.getName(), mode);
+    }
+
+    @GetMapping("/{conversation-id}/messages/search")
+    public ResponseEntity<List<MessageResponse>> searchMessages(
+            @PathVariable("conversation-id") UUID conversationId,
+            @RequestParam(name = "q") String query,
+            Authentication authentication) {
+        return ResponseEntity.ok(messageService.searchMessages(
+                conversationId, authentication.getName(), query));
+    }
+
+    @PostMapping("/{conversation-id}/messages/{message-id}/forward")
+    public ResponseEntity<MessageResponse> forwardMessage(
+            @PathVariable("conversation-id") UUID conversationId,
+            @PathVariable("message-id") Long messageId,
+            @Valid @RequestBody ForwardMessageRequest request,
+            Authentication authentication) {
+        MessageResponse response = messageService.forwardMessage(
+                conversationId, messageId, request.targetConversationId(), authentication.getName());
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/{conversation-id}/messages/{message-id}/info")
+    public ResponseEntity<MessageInfoResponse> getMessageInfo(
+            @PathVariable("conversation-id") UUID conversationId,
+            @PathVariable("message-id") Long messageId,
+            Authentication authentication) {
+        return ResponseEntity.ok(messageService.getMessageInfo(
+                conversationId, messageId, authentication.getName()));
     }
 }

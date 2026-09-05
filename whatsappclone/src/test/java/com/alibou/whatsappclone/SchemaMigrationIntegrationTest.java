@@ -103,7 +103,7 @@ class SchemaMigrationIntegrationTest {
     void flywayMigrationsAreApplied() {
         Integer applied = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = true", Integer.class);
-        assertThat(applied).isEqualTo(2);
+        assertThat(applied).isEqualTo(10);
 
         String conversationTable = jdbcTemplate.queryForObject(
                 "SELECT to_regclass('conversations')::text", String.class);
@@ -128,6 +128,16 @@ class SchemaMigrationIntegrationTest {
         assertThat(replyColumn).isEqualTo(1);
         assertThat(editedColumn).isEqualTo(1);
         assertThat(deletedColumn).isEqualTo(1);
+
+        // V3: reactions table
+        String reactionsTable = jdbcTemplate.queryForObject(
+                "SELECT to_regclass('reactions')::text", String.class);
+        assertThat(reactionsTable).isEqualTo("reactions");
+
+        // V4: per-user message deletions table
+        String deletionsTable = jdbcTemplate.queryForObject(
+                "SELECT to_regclass('message_deletions')::text", String.class);
+        assertThat(deletionsTable).isEqualTo("message_deletions");
     }
 
     @Test

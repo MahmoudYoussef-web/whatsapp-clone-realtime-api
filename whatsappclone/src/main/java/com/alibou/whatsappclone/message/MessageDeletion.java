@@ -1,7 +1,7 @@
 package com.alibou.whatsappclone.message;
 
 import com.alibou.whatsappclone.common.BaseAuditingEntity;
-import jakarta.persistence.Column;
+import com.alibou.whatsappclone.user.User;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -22,8 +23,10 @@ import lombok.experimental.SuperBuilder;
 @AllArgsConstructor
 @NoArgsConstructor
 @Entity
-@Table(name = "attachments")
-public class Attachment extends BaseAuditingEntity {
+@Table(name = "message_deletions", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_message_deletion_per_user", columnNames = {"message_id", "user_id"})
+})
+public class MessageDeletion extends BaseAuditingEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -33,26 +36,7 @@ public class Attachment extends BaseAuditingEntity {
     @JoinColumn(name = "message_id", nullable = false)
     private Message message;
 
-    @Column(name = "object_key", nullable = false, length = 512)
-    private String objectKey;
-
-    /** Small preview object (images only); chat list renders this, viewer loads full. */
-    @Column(name = "thumbnail_object_key", length = 512)
-    private String thumbnailObjectKey;
-
-    @Column(nullable = false)
-    private String bucket;
-
-    @Column(name = "mime_type", nullable = false)
-    private String mimeType;
-
-    @Column(name = "size_bytes", nullable = false)
-    private Long sizeBytes;
-
-    private Integer width;
-
-    private Integer height;
-
-    @Column(name = "duration_seconds")
-    private Integer durationSeconds;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 }

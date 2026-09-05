@@ -72,6 +72,10 @@ public class Message extends BaseAuditingEntity {
     @Column(nullable = false)
     private boolean deletedForEveryone = false;
 
+    /** WhatsApp-style forward flag: the copy shows a "Forwarded" badge. */
+    @Column(nullable = false)
+    private boolean forwarded = false;
+
     @OneToMany(mappedBy = "message", fetch = FetchType.LAZY)
     private List<Attachment> attachments = new ArrayList<>();
 }

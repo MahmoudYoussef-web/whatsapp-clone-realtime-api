@@ -100,4 +100,19 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             """)
     java.util.Optional<Message> findByIdAndConversationId(@Param("messageId") Long messageId,
                                                           @Param("conversationId") UUID conversationId);
+
+    /**
+     * In-conversation text search, newest first, capped by Pageable.
+     * Deleted-for-everyone rows are included here and masked at mapping time.
+     */
+    @Query("""
+            SELECT m FROM Message m
+            WHERE m.conversation.id = :conversationId
+              AND m.content IS NOT NULL
+              AND LOWER(m.content) LIKE LOWER(CONCAT('%', :query, '%'))
+            ORDER BY m.id DESC
+            """)
+    List<Message> searchMessages(@Param("conversationId") UUID conversationId,
+                                 @Param("query") String query,
+                                 Pageable pageable);
 }

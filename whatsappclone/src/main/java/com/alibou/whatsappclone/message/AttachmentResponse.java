@@ -17,4 +17,5 @@ public class AttachmentResponse {
     private final Integer height;
     private final Integer durationSeconds;
     private final String url;
+    private final String thumbnailUrl;
 }
