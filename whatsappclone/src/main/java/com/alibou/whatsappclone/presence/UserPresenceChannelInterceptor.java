@@ -3,6 +3,7 @@ package com.alibou.whatsappclone.presence;
 import com.alibou.whatsappclone.user.UserRepository;
 import com.alibou.whatsappclone.ws.WebSocketConfig;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
 import org.springframework.messaging.Message;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Component;
 // sockjs can't send headers on handshake so token comes on CONNECT frame
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class UserPresenceChannelInterceptor implements ChannelInterceptor, Ordered {
 
     static final String SESSION_AUTH_KEY = "PRESENCE_AUTH_TOKEN";
@@ -49,18 +51,22 @@ public class UserPresenceChannelInterceptor implements ChannelInterceptor, Order
             case DISCONNECT -> {
                 JwtAuthenticationToken token = sessionToken(accessor);
                 if (token != null) {
-                    presenceService.markOffline(token.getName());
-                    enforceNotExpired(accessor, message, token);
+                    try {
+                        presenceService.markOffline(token.getName());
+                    } catch (Exception e) {
+                        log.warn("markOffline failed for {}", token.getName(), e);
+                    }
                 }
             }
             default -> {
                 JwtAuthenticationToken token = sessionToken(accessor);
-                if (token != null) {
-                    enforceNotExpired(accessor, message, token);
-                    presenceService.refresh(token.getName());
-                    if (accessor.getUser() == null) {
-                        accessor.setUser(token);
-                    }
+                if (token == null) {
+                    throw new MessageDeliveryException(message, "STOMP session not authenticated");
+                }
+                enforceNotExpired(accessor, message, token);
+                presenceService.refresh(token.getName());
+                if (accessor.getUser() == null) {
+                    accessor.setUser(token);
                 }
             }
         }
@@ -82,6 +88,7 @@ public class UserPresenceChannelInterceptor implements ChannelInterceptor, Order
             }
             presenceService.setOnline(token.getName());
         } catch (JwtException ex) {
+            log.warn("STOMP CONNECT rejected: {}", ex.getMessage());
             throw new MessageDeliveryException(message, ex);
         }
     }

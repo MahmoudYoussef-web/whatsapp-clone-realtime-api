@@ -40,7 +40,7 @@ public class SecurityConfig {
                 .securityMatcher("/v3/api-docs/**", "/v2/api-docs",
                         "/swagger-resources/**", "/swagger-ui/**", "/swagger-ui.html",
                         "/webjars/**", "/configuration/ui", "/configuration/security",
-                        "/ws/**", "/actuator/health", "/actuator/info", "/actuator/metrics")
+                        "/ws/**", "/actuator/health", "/actuator/info")
                 .cors(withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(req -> req.anyRequest().permitAll());
