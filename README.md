@@ -54,9 +54,9 @@ Small whatsapp-like backend with realtime delivery (SENT → DELIVERED → READ)
 
 ## Overview
 
-This is a portfolio-grade refactor of a WhatsApp-style clone. It is a **multi-process realtime system** — Spring Boot API + PostgreSQL + Redis + MinIO + Keycloak — not a CRUD wrapper. The interesting work lives in delivery semantics, realtime identity, and the boundaries between the layers.
+Simple WhatsApp-style clone I built to learn Spring Boot + websockets. Backend is Spring Boot with Postgres, Redis, MinIO and Keycloak. Main thing I tried to get right is message delivery (SENT → DELIVERED → READ).
 
-### Design decisions that go beyond a typical CRUD API
+### Notes on how it works
 
 | Challenge | How it's solved |
 |---|---|
