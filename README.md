@@ -2,9 +2,7 @@
 
 # WhatsApp Clone — Realtime Messaging API
 
-[![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=26&duration=3200&pause=600&color=25C16B&center=true&vCenter=true&width=760&height=70&lines=WhatsApp+Clone;A+backend+that+thinks+about+delivery;SENT+%E2%86%92+DELIVERED+%E2%86%92+READ%2C+guaranteed;Not+just+another+CRUD+API)](https://git.io/typing-svg)
-
-Real-time messaging backend engineered for **correct delivery** — receiver-driven receipts, live presence, media that never touches the API layer.
+Small whatsapp-like backend with realtime delivery (SENT → DELIVERED → READ).
 
 </div>
 
@@ -31,25 +29,8 @@ Real-time messaging backend engineered for **correct delivery** — receiver-dri
 ## Badges
 
 [![CI](https://github.com/MahmoudYoussef-web/whatsapp-clone-realtime-api/actions/workflows/build.yml/badge.svg)](https://github.com/MahmoudYoussef-web/whatsapp-clone-realtime-api/actions/workflows/build.yml)
-
-[![Java](https://img.shields.io/badge/Java-17-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://www.java.com/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4.13-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Redis](https://img.shields.io/badge/Redis-7-FF4438?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
-[![OAuth2 · JWT](https://img.shields.io/badge/OAuth2%20%C2%B7%20JWT-Keycloak-000000?style=for-the-badge&logo=keycloak&logoColor=white)](https://www.keycloak.org/)
-[![Flyway](https://img.shields.io/badge/Flyway-migrations-CC0200?style=for-the-badge&logo=flyway&logoColor=white)](https://flywaydb.org/)
-[![Docker](https://img.shields.io/badge/Docker-compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
-[![Swagger](https://img.shields.io/badge/Swagger-OpenAPI-85EA2D?style=for-the-badge&logo=swagger&logoColor=white)](https://swagger.io/)
-[![Maven](https://img.shields.io/badge/Maven-build-C71A36?style=for-the-badge&logo=apachemaven&logoColor=white)](https://maven.apache.org/)
-[![WebSocket](https://img.shields.io/badge/WebSocket-STOMP-010101?style=for-the-badge&logo=socketdotio&logoColor=white)](https://spring.io/projects/spring-websocket)
-
-[![Architecture](https://img.shields.io/badge/%F0%9F%93%90-Architecture-25C16B?style=flat-square)](./README.md#system-architecture)
-[![Design Decisions](https://img.shields.io/badge/%F0%9F%A7%A0-Design%20Decisions-25C16B?style=flat-square)](./README.md#overview)
-[![Features](https://img.shields.io/badge/%F0%9F%93%A6-Features-25C16B?style=flat-square)](./README.md#features)
-[![API Reference](https://img.shields.io/badge/%F0%9F%94%8C-API%20Reference-25C16B?style=flat-square)](./README.md#api-reference)
-[![Database](https://img.shields.io/badge/%F0%9F%97%84-Database%20Schema-25C16B?style=flat-square)](./README.md#database-schema)
-[![Security](https://img.shields.io/badge/%F0%9F%94%92-Security-25C16B?style=flat-square)](./README.md#security)
-[![Getting Started](https://img.shields.io/badge/%F0%9F%9A%80-Getting%20Started-25C16B?style=flat-square)](./README.md#getting-started)
+[![Java](https://img.shields.io/badge/Java-17-ED8B00)](https://www.java.com/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4.13-6DB33F)](https://spring.io/projects/spring-boot)
 
 ---
 
