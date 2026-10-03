@@ -15,8 +15,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -36,10 +38,7 @@ public class ConversationService {
     private final FileStorageService fileStorageService;
     private final StorageProperties storageProperties;
 
-    /**
-     * Creates a PRIVATE conversation, or returns the existing one (idempotent).
-     * A PRIVATE conversation always holds exactly two participants.
-     */
+    // create or return existing private chat
     @Transactional
     public UUID createPrivateConversation(String authenticatedUserId, String participantId) {
         if (authenticatedUserId.equals(participantId)) {
@@ -97,7 +96,7 @@ public class ConversationService {
         conversation = conversationRepository.save(conversation);
 
         addParticipantWithRole(conversation, creator, ParticipantRole.ADMIN);
-        List<String> addedIds = new java.util.ArrayList<>();
+        List<String> addedIds = new ArrayList<>();
         for (String memberId : unique) {
             User member = userRepository.findById(memberId)
                     .orElseThrow(() -> new EntityNotFoundException("User with id " + memberId + " not found"));
@@ -179,7 +178,7 @@ public class ConversationService {
     }
 
     @Transactional
-    public void updateGroupAvatar(UUID conversationId, String userId, org.springframework.web.multipart.MultipartFile file) {
+    public void updateGroupAvatar(UUID conversationId, String userId, MultipartFile file) {
         Conversation conversation = requireGroup(conversationId);
         requireParticipant(conversationId, userId);
         requireAdmin(conversationId, userId);

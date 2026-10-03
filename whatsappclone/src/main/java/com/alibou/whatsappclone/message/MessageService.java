@@ -52,6 +52,12 @@ public class MessageService {
     @Transactional
     public MessageResponse sendTextMessage(UUID conversationId, String senderId, SendMessageRequest request) {
         ConversationParticipant participant = conversationService.requireParticipant(conversationId, senderId);
+        if (request.content() == null || request.content().isBlank()) {
+            throw new IllegalArgumentException("message content can't be empty");
+        }
+        if (request.content().length() > 4096) {
+            throw new IllegalArgumentException("message too long, max 4096 chars");
+        }
 
         Message message = Message.builder()
                 .conversation(participant.getConversation())
@@ -212,7 +218,7 @@ public class MessageService {
                 .build();
     }
 
-    // only sender can edit. TODO: should we block edit after 15 min? need product decision
+    // only sender can edit within 15 min
     @Transactional
     public MessageResponse editMessage(UUID conversationId, Long messageId, String viewerId, String newContent) {
         conversationService.requireParticipant(conversationId, viewerId);
@@ -223,6 +229,10 @@ public class MessageService {
         }
         if (newContent == null || newContent.isBlank()) {
             throw new IllegalArgumentException("edited content can't be empty");
+        }
+        if (message.getCreatedDate() != null
+                && message.getCreatedDate().plusMinutes(15).isBefore(LocalDateTime.now())) {
+            throw new IllegalStateException("Edit window expired (15 min)");
         }
 
         message.setContent(newContent);
@@ -257,8 +267,10 @@ public class MessageService {
             for (String otherId : conversationService.getOtherParticipantIds(conversationId, viewerId)) {
                 notificationService.sendNotification(otherId, notification);
             }
-        } else {
+        } else if ("me".equals(mode) || mode == null) {
             deleteForMe(message, participant, viewerId);
+        } else {
+            throw new IllegalArgumentException("unknown delete mode, use me or everyone");
         }
     }
 
