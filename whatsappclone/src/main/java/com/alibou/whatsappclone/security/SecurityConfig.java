@@ -62,7 +62,7 @@ public class SecurityConfig {
                 .oauth2ResourceServer(auth ->
                         auth.jwt(token ->
                                 token.jwtAuthenticationConverter(new KeycloakJwtAuthenticationConverter())))
-                // rate limit first so we don't hit db on abuse
+                // block spam before touching db
                 .addFilterAfter(rateLimitFilter, BearerTokenAuthenticationFilter.class)
                 .addFilterAfter(userSynchronizerFilter, RateLimitFilter.class);
         return http.build();

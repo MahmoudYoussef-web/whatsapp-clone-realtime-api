@@ -3,8 +3,6 @@
 Small whatsapp-like backend with realtime delivery (SENT → DELIVERED → READ).
 
 [![CI](https://github.com/MahmoudYoussef-web/whatsapp-clone-realtime-api/actions/workflows/build.yml/badge.svg)](https://github.com/MahmoudYoussef-web/whatsapp-clone-realtime-api/actions/workflows/build.yml)
-[![Java](https://img.shields.io/badge/Java-17-ED8B00)](https://www.java.com/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4.13-6DB33F)](https://spring.io/projects/spring-boot)
 
 <img src="docs/screenshots/chat-dark.png" width="700" alt="Chat UI"/>
 

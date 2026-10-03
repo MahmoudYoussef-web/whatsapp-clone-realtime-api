@@ -40,7 +40,7 @@ public class MessageService {
     private final NotificationService notificationService;
     private final FileStorageService fileStorageService;
     private final ReactionService reactionService;
-    // metrics, can be null in unit tests
+    // null in tests, don't crash on it
     private final io.micrometer.core.instrument.MeterRegistry meterRegistry;
 
     private void countSent(String kind) {
