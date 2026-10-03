@@ -1,0 +1,33 @@
+{
+  "realm": "whatsapp-clone",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "whatsapp-clone-app",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "redirectUris": ["http://localhost:4200/*"],
+      "webOrigins": ["http://localhost:4200", "http://localhost:8080"]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@example.com",
+      "firstName": "Alice",
+      "lastName": "Demo",
+      "credentials": [{ "type": "password", "value": "alice123", "temporary": false }]
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "email": "bob@example.com",
+      "firstName": "Bob",
+      "lastName": "Demo",
+      "credentials": [{ "type": "password", "value": "bob123", "temporary": false }]
+    }
+  ]
+}

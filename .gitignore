@@ -9,3 +9,7 @@ Thumbs.db
 
 # Logs
 *.log
+ng-serve*.log
+
+# Local env (example is tracked, real one isn't)
+.env

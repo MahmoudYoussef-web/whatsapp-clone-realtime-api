@@ -1,0 +1,38 @@
+name: build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Verify backend (unit + Testcontainers integration)
+        working-directory: whatsappclone
+        run: mvn -B verify
+      - name: Validate compose file
+        run: docker compose config -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: whatsapp-clone-ui/package-lock.json
+      - name: Install
+        working-directory: whatsapp-clone-ui
+        run: npm ci
+      - name: Build
+        working-directory: whatsapp-clone-ui
+        run: npm run build
