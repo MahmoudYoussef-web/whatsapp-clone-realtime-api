@@ -11,6 +11,7 @@ import com.alibou.whatsappclone.user.User;
 import com.alibou.whatsappclone.user.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ConversationService {
 
     private final ConversationRepository conversationRepository;
@@ -189,8 +191,7 @@ public class ConversationService {
             try {
                 fileStorageService.delete(stored.bucket(), oldKey);
             } catch (RuntimeException e) {
-                org.slf4j.LoggerFactory.getLogger(ConversationService.class)
-                        .warn("Could not delete old group avatar {}", oldKey, e);
+                log.warn("Could not delete old group avatar {}", oldKey, e);
             }
         }
         for (String otherId : getOtherParticipantIds(conversationId, userId)) {
@@ -211,10 +212,7 @@ public class ConversationService {
         return conversation;
     }
 
-    /**
-     * Lists group members with roles and avatar URLs. Any participant may
-     * read the roster; admins are distinguished so the UI can gate actions.
-     */
+    // group members list, admins first
     @Transactional(readOnly = true)
     public List<GroupMemberResponse> getGroupMembers(UUID conversationId, String viewerId) {
         requireGroup(conversationId);
@@ -248,8 +246,7 @@ public class ConversationService {
         try {
             return fileStorageService.presignedGetUrl(storageProperties.bucket(), objectKey);
         } catch (RuntimeException e) {
-            org.slf4j.LoggerFactory.getLogger(ConversationService.class)
-                    .warn("Could not presign avatar {}", objectKey, e);
+            log.warn("Could not presign avatar {}", objectKey, e);
             return null;
         }
     }

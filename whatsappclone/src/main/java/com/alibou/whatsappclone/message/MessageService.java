@@ -12,6 +12,7 @@ import com.alibou.whatsappclone.storage.FileStorageService;
 import com.alibou.whatsappclone.storage.StoredFile;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class MessageService {
 
     private final MessageRepository messageRepository;
@@ -38,10 +40,7 @@ public class MessageService {
     private final NotificationService notificationService;
     private final FileStorageService fileStorageService;
     private final ReactionService reactionService;
-    /**
-     * Null in plain unit tests (Mockito @InjectMocks) — all increments are
-     * null-guarded so metrics never break business logic.
-     */
+    // metrics, can be null in unit tests
     private final io.micrometer.core.instrument.MeterRegistry meterRegistry;
 
     private void countSent(String kind) {
@@ -75,11 +74,7 @@ public class MessageService {
         return response;
     }
 
-    /**
-     * A reply target must exist and live in the same conversation as the reply -
-     * otherwise the payload would leak message ids from conversations the sender
-     * is not part of.
-     */
+    // reply has to be in same conversation
     private Message resolveReplyTarget(UUID conversationId, Long replyToMessageId) {
         if (replyToMessageId == null) {
             return null;
@@ -92,10 +87,7 @@ public class MessageService {
         return replyTo;
     }
 
-    /**
-     * Delivered notification fired over WebSocket: the receiver ACKs each incoming
-     * message, which transitions it SENT -> DELIVERED (guarded - never downgrades).
-     */
+    // receiver acks over websocket -> SENT becomes DELIVERED
     @Transactional
     public boolean acknowledgeDelivered(Long messageId, String ackerId) {
         Message message = messageRepository.findById(messageId)
@@ -115,10 +107,7 @@ public class MessageService {
         return false;
     }
 
-    /**
-     * Best-effort DELIVERED transition. Guarded - a message that is already
-     * READ/DELIVERED is never downgraded.
-     */
+    // only move SENT -> DELIVERED, never backwards
     @Transactional
     public boolean markDeliveredIfSent(Long messageId) {
         return messageRepository.updateStatusIfCurrent(messageId, MessageStatus.SENT, MessageStatus.DELIVERED) > 0;
@@ -156,8 +145,7 @@ public class MessageService {
                     attachment.setHeight(thumb.height());
                 }
             } catch (java.io.IOException e) {
-                org.slf4j.LoggerFactory.getLogger(MessageService.class)
-                        .warn("Could not read image bytes for thumbnail", e);
+                log.warn("Could not read image bytes for thumbnail", e);
             }
         }
         attachment = attachmentRepository.save(attachment);
@@ -173,11 +161,7 @@ public class MessageService {
         return response;
     }
 
-    /**
-     * Offline delivery: messages sent to the viewer while they were away transition
-     * SENT -> DELIVERED when the history is fetched, and each affected sender is
-     * notified. Never fires again once every message has been accounted for.
-     */
+    // when user opens chat, mark anything SENT to him as DELIVERED
     @Transactional
     public MessagePageResponse getMessages(UUID conversationId, String viewerId, Long before, int limit) {
         conversationService.requireParticipant(conversationId, viewerId);
@@ -228,10 +212,7 @@ public class MessageService {
                 .build();
     }
 
-    /**
-     * Only the sender can edit, and only while the message is not deleted
-     * (deleted-for-everyone is final; deleted-for-me hides it from the sender's UI).
-     */
+    // only sender can edit. TODO: should we block edit after 15 min? need product decision
     @Transactional
     public MessageResponse editMessage(UUID conversationId, Long messageId, String viewerId, String newContent) {
         conversationService.requireParticipant(conversationId, viewerId);
@@ -239,6 +220,9 @@ public class MessageService {
         requireSender(message, viewerId);
         if (message.isDeletedForEveryone()) {
             throw new IllegalStateException("Cannot edit a deleted message");
+        }
+        if (newContent == null || newContent.isBlank()) {
+            throw new IllegalArgumentException("edited content can't be empty");
         }
 
         message.setContent(newContent);
@@ -252,15 +236,7 @@ public class MessageService {
         return response;
     }
 
-    /**
-     * mode=me: "delete for me" - removes the message from the acting user's own
-     * view only (stored per-user in message_deletions). Any participant can do
-     * it; other participants are NOT notified and keep seeing the message
-     * untouched. Idempotent - a second call is a no-op.
-     * <p>
-     * mode=everyone: "delete for everyone" - sender-only, masks the message for
-     * every participant (content and attachments are never exposed again).
-     */
+    // mode=me hides for me only, mode=everyone masks for all (sender only)
     @Transactional
     public void deleteMessage(UUID conversationId, Long messageId, String viewerId, String mode) {
         ConversationParticipant participant = conversationService.requireParticipant(conversationId, viewerId);
@@ -295,10 +271,7 @@ public class MessageService {
         }
     }
 
-    /**
-     * In-conversation text search (max 20 hits, newest first). Attachments and
-     * reactions are batched exactly like history pages (no N+1).
-     */
+    // search inside one conversation, max 20
     @Transactional(readOnly = true)
     public List<MessageResponse> searchMessages(UUID conversationId, String viewerId, String query) {
         conversationService.requireParticipant(conversationId, viewerId);
@@ -314,12 +287,7 @@ public class MessageService {
         return mapper.toResponses(hits, attachmentsByMessageId, viewerId);
     }
 
-    /**
-     * Forwards a message to another conversation the forwarder belongs to.
-     * Creates a new message (new id, SENT) copying content/type and attachment
-     * references (same MinIO objects, no re-upload), flagged as forwarded.
-     * Deleted-for-everyone content can never be forwarded again.
-     */
+    // forward copies content to another conversation
     @Transactional
     public MessageResponse forwardMessage(UUID sourceConversationId, Long messageId,
                                           UUID targetConversationId, String forwarderId) {
@@ -364,11 +332,7 @@ public class MessageService {
         return response;
     }
 
-    /**
-     * Approximate "message info" (read by...). Read state is conversation-wide
-     * (last_read_message_id per participant), so a participant counts as having
-     * read this message when their last-read id >= this message id.
-     */
+    // who read this message (approximation, read is per-conversation)
     @Transactional(readOnly = true)
     public MessageInfoResponse getMessageInfo(UUID conversationId, Long messageId, String viewerId) {
         conversationService.requireParticipant(conversationId, viewerId);
@@ -403,11 +367,7 @@ public class MessageService {
         }
     }
 
-    /**
-     * Marks the RECIPIENT's unread messages as READ only (messages the viewer sent
-     * themselves are never touched) and resets the viewer's unread counter.
-     * Other participants are notified so their UI can update ticks in real time.
-     */
+    // mark received msgs as read + reset my unread counter
     @Transactional
     public void markMessagesAsRead(UUID conversationId, String viewerId) {
         conversationService.requireParticipant(conversationId, viewerId);
