@@ -32,13 +32,7 @@ public class SecurityConfig {
     @Value("${app.cors.allowed-origins:http://localhost:4200}")
     private String allowedOrigins;
 
-    /**
-     * Public chain (KI-001 fix): docs, swagger, WS handshake and actuator health
-     * bypass the OAuth2 resource-server entirely. Previously a single chain with
-     * permitAll still ran BearerTokenAuthenticationFilter, so /v3/api-docs
-     * without a token -> 401 and with a token ran the user-sync filter -> 500
-     * on doc generation. Separate matcher chain fixes both.
-     */
+    // public endpoints: swagger, ws handshake, health - no auth needed
     @Bean
     @Order(1)
     public SecurityFilterChain publicChain(HttpSecurity http) throws Exception {
@@ -68,7 +62,7 @@ public class SecurityConfig {
                 .oauth2ResourceServer(auth ->
                         auth.jwt(token ->
                                 token.jwtAuthenticationConverter(new KeycloakJwtAuthenticationConverter())))
-                // Shed abusive load before the DB-touching user-sync filter.
+                // rate limit first so we don't hit db on abuse
                 .addFilterAfter(rateLimitFilter, BearerTokenAuthenticationFilter.class)
                 .addFilterAfter(userSynchronizerFilter, RateLimitFilter.class);
         return http.build();
